@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Clock, Users, Download, Trash2, Calendar } from "lucide-react";
+import * as XLSX from "xlsx";
 
 interface TimeRecord {
   id: string;
@@ -146,7 +147,7 @@ const Index = () => {
     toast.success(`${typeLabels[type]} registrada: ${currentTime}`);
   };
 
-  const exportToCSV = () => {
+  const exportToXLS = () => {
     const filteredRecords = filterDate
       ? records.filter((r) => r.date === filterDate)
       : records;
@@ -156,29 +157,22 @@ const Index = () => {
       return;
     }
 
-    const headers = ["Data", "Funcionário", "Entrada", "Saída Almoço", "Retorno Almoço", "Saída", "Total Horas"];
-    const csvContent = [
-      headers.join(","),
-      ...filteredRecords.map((r) =>
-        [
-          r.date,
-          r.employeeName,
-          r.entrada || "--:--",
-          r.saidaAlmoco || "--:--",
-          r.retornoAlmoco || "--:--",
-          r.saida || "--:--",
-          r.totalHoras || "--:--",
-        ].join(",")
-      ),
-    ].join("\n");
+    const data = filteredRecords.map((r) => ({
+      Data: new Date(r.date + "T00:00:00").toLocaleDateString("pt-BR"),
+      Funcionário: r.employeeName,
+      Entrada: r.entrada || "--:--",
+      "Saída Almoço": r.saidaAlmoco || "--:--",
+      "Retorno Almoço": r.retornoAlmoco || "--:--",
+      Saída: r.saida || "--:--",
+      "Total Horas": r.totalHoras || "--:--",
+    }));
 
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `registros-ponto-${filterDate || "todos"}.csv`);
-    link.click();
-    toast.success("CSV exportado com sucesso!");
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Registros");
+    
+    XLSX.writeFile(workbook, `registros-ponto-${filterDate || "todos"}.xlsx`);
+    toast.success("Excel exportado com sucesso!");
   };
 
   const clearAllData = () => {
@@ -306,9 +300,9 @@ const Index = () => {
                   className="w-auto"
                 />
               </div>
-              <Button onClick={exportToCSV} variant="outline" size="sm">
+              <Button onClick={exportToXLS} variant="outline" size="sm">
                 <Download className="w-4 h-4 mr-2" />
-                Exportar CSV
+                Exportar Excel
               </Button>
               <Button
                 onClick={clearAllData}
