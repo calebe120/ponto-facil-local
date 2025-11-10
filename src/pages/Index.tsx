@@ -46,6 +46,9 @@ const Index = () => {
   });
   const [clearPassword, setClearPassword] = useState("");
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const [periodDialogOpen, setPeriodDialogOpen] = useState(false);
+  const [periodStartDate, setPeriodStartDate] = useState("");
+  const [periodEndDate, setPeriodEndDate] = useState("");
 
   // Load data from localStorage
   useEffect(() => {
@@ -194,6 +197,84 @@ const Index = () => {
     
     XLSX.writeFile(workbook, `registros-ponto-${filterDate || "todos"}.xlsx`);
     toast.success("Excel exportado com sucesso!");
+  };
+
+  const exportCurrentMonth = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth();
+    const firstDay = new Date(year, month, 1).toISOString().split("T")[0];
+    const lastDay = new Date(year, month + 1, 0).toISOString().split("T")[0];
+
+    const monthRecords = records.filter((r) => r.date >= firstDay && r.date <= lastDay);
+
+    if (monthRecords.length === 0) {
+      toast.error("Nenhum registro encontrado para o mês atual");
+      return;
+    }
+
+    const data = monthRecords.map((r) => ({
+      Data: new Date(r.date + "T00:00:00").toLocaleDateString("pt-BR"),
+      Funcionário: r.employeeName,
+      Entrada: r.entrada || "--:--",
+      "Saída Almoço": r.saidaAlmoco || "--:--",
+      "Retorno Almoço": r.retornoAlmoco || "--:--",
+      Saída: r.saida || "--:--",
+      "Total Horas": r.totalHoras || "--:--",
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Registros");
+    
+    const monthName = today.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+    XLSX.writeFile(workbook, `registros-ponto-${monthName}.xlsx`);
+    toast.success("Excel do mês exportado com sucesso!");
+  };
+
+  const openPeriodDialog = () => {
+    setPeriodStartDate("");
+    setPeriodEndDate("");
+    setPeriodDialogOpen(true);
+  };
+
+  const exportPeriod = () => {
+    if (!periodStartDate || !periodEndDate) {
+      toast.error("Selecione as datas inicial e final");
+      return;
+    }
+
+    if (periodStartDate > periodEndDate) {
+      toast.error("Data inicial não pode ser maior que a data final");
+      return;
+    }
+
+    const periodRecords = records.filter(
+      (r) => r.date >= periodStartDate && r.date <= periodEndDate
+    );
+
+    if (periodRecords.length === 0) {
+      toast.error("Nenhum registro encontrado para o período selecionado");
+      return;
+    }
+
+    const data = periodRecords.map((r) => ({
+      Data: new Date(r.date + "T00:00:00").toLocaleDateString("pt-BR"),
+      Funcionário: r.employeeName,
+      Entrada: r.entrada || "--:--",
+      "Saída Almoço": r.saidaAlmoco || "--:--",
+      "Retorno Almoço": r.retornoAlmoco || "--:--",
+      Saída: r.saida || "--:--",
+      "Total Horas": r.totalHoras || "--:--",
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Registros");
+    
+    XLSX.writeFile(workbook, `registros-ponto-${periodStartDate}_${periodEndDate}.xlsx`);
+    toast.success("Excel do período exportado com sucesso!");
+    setPeriodDialogOpen(false);
   };
 
   const openClearDialog = () => {
@@ -381,7 +462,15 @@ const Index = () => {
               </div>
               <Button onClick={exportToXLS} variant="outline" size="sm">
                 <Download className="w-4 h-4 mr-2" />
-                Exportar Excel
+                Exportar Dia
+              </Button>
+              <Button onClick={exportCurrentMonth} variant="outline" size="sm">
+                <Download className="w-4 h-4 mr-2" />
+                Exportar Mês Atual
+              </Button>
+              <Button onClick={openPeriodDialog} variant="outline" size="sm">
+                <Download className="w-4 h-4 mr-2" />
+                Exportar Período
               </Button>
               <Button
                 onClick={openClearDialog}
@@ -527,6 +616,47 @@ const Index = () => {
               </Button>
               <Button onClick={saveEditedRecord} className="bg-success hover:bg-success/90">
                 Salvar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Period Export Dialog */}
+        <Dialog open={periodDialogOpen} onOpenChange={setPeriodDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Exportar Período</DialogTitle>
+              <DialogDescription>
+                Selecione a data inicial e final para exportar os registros
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="period-start">Data Inicial</Label>
+                <Input
+                  id="period-start"
+                  type="date"
+                  value={periodStartDate}
+                  onChange={(e) => setPeriodStartDate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="period-end">Data Final</Label>
+                <Input
+                  id="period-end"
+                  type="date"
+                  value={periodEndDate}
+                  onChange={(e) => setPeriodEndDate(e.target.value)}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setPeriodDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={exportPeriod} className="bg-success hover:bg-success/90">
+                <Download className="w-4 h-4 mr-2" />
+                Exportar
               </Button>
             </DialogFooter>
           </DialogContent>
