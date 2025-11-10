@@ -14,6 +14,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import logoCvc from "@/assets/logo-cvc.jpeg";
 
 interface TimeRecord {
   id: string;
@@ -275,7 +276,10 @@ const Index = () => {
     <div className="min-h-screen bg-background p-4 md:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
-        <div className="text-center space-y-2">
+        <div className="text-center space-y-4">
+          <div className="flex items-center justify-center gap-4">
+            <img src={logoCvc} alt="CVC Logo" className="w-24 h-24 object-contain" />
+          </div>
           <h1 className="text-4xl font-bold text-foreground flex items-center justify-center gap-3">
             <Clock className="w-10 h-10 text-accent" />
             Sistema de Controle de Ponto
