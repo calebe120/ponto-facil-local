@@ -3,8 +3,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Clock, Users, Download, Trash2, Calendar } from "lucide-react";
+import { Clock, Users, Download, Trash2, Calendar, Edit } from "lucide-react";
 import * as XLSX from "xlsx";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 interface TimeRecord {
   id: string;
@@ -25,6 +34,17 @@ const Index = () => {
   const [filterDate, setFilterDate] = useState(
     new Date().toISOString().split("T")[0]
   );
+  const [editingRecord, setEditingRecord] = useState<TimeRecord | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editPassword, setEditPassword] = useState("");
+  const [editFormData, setEditFormData] = useState({
+    entrada: "",
+    saidaAlmoco: "",
+    retornoAlmoco: "",
+    saida: "",
+  });
+  const [clearPassword, setClearPassword] = useState("");
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
 
   // Load data from localStorage
   useEffect(() => {
@@ -175,14 +195,69 @@ const Index = () => {
     toast.success("Excel exportado com sucesso!");
   };
 
+  const openClearDialog = () => {
+    setClearDialogOpen(true);
+    setClearPassword("");
+  };
+
   const clearAllData = () => {
-    if (window.confirm("Tem certeza que deseja limpar TODOS os dados? Esta ação não pode ser desfeita.")) {
-      setEmployees([]);
-      setRecords([]);
-      localStorage.removeItem("employees");
-      localStorage.removeItem("timeRecords");
-      toast.success("Todos os dados foram limpos");
+    if (clearPassword !== "3255") {
+      toast.error("Senha incorreta");
+      return;
     }
+    setEmployees([]);
+    setRecords([]);
+    localStorage.removeItem("employees");
+    localStorage.removeItem("timeRecords");
+    toast.success("Todos os dados foram limpos");
+    setClearDialogOpen(false);
+    setClearPassword("");
+  };
+
+  const openEditDialog = (record: TimeRecord) => {
+    setEditingRecord(record);
+    setEditFormData({
+      entrada: record.entrada || "",
+      saidaAlmoco: record.saidaAlmoco || "",
+      retornoAlmoco: record.retornoAlmoco || "",
+      saida: record.saida || "",
+    });
+    setEditPassword("");
+    setEditDialogOpen(true);
+  };
+
+  const saveEditedRecord = () => {
+    if (editPassword !== "3255") {
+      toast.error("Senha incorreta");
+      return;
+    }
+
+    if (!editingRecord) return;
+
+    const updatedRecords = records.map((r) => {
+      if (r.id === editingRecord.id) {
+        const updatedRecord = {
+          ...r,
+          entrada: editFormData.entrada,
+          saidaAlmoco: editFormData.saidaAlmoco,
+          retornoAlmoco: editFormData.retornoAlmoco,
+          saida: editFormData.saida,
+        };
+        
+        const { total, overtime } = calculateTotalHours(updatedRecord);
+        updatedRecord.totalHoras = total;
+        updatedRecord.horasExtras = overtime;
+        
+        return updatedRecord;
+      }
+      return r;
+    });
+
+    setRecords(updatedRecords);
+    setEditDialogOpen(false);
+    setEditingRecord(null);
+    setEditPassword("");
+    toast.success("Registro atualizado com sucesso!");
   };
 
   const filteredRecords = filterDate
@@ -305,7 +380,7 @@ const Index = () => {
                 Exportar Excel
               </Button>
               <Button
-                onClick={clearAllData}
+                onClick={openClearDialog}
                 variant="outline"
                 size="sm"
                 className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
@@ -332,6 +407,7 @@ const Index = () => {
                     <th className="text-left p-3 font-semibold">Retorno</th>
                     <th className="text-left p-3 font-semibold">Saída</th>
                     <th className="text-left p-3 font-semibold">Total Horas</th>
+                    <th className="text-left p-3 font-semibold">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -357,6 +433,16 @@ const Index = () => {
                           {record.horasExtras && " ⚠️"}
                         </span>
                       </td>
+                      <td className="p-3">
+                        <Button
+                          onClick={() => openEditDialog(record)}
+                          size="sm"
+                          variant="outline"
+                          className="border-info text-info hover:bg-info hover:text-info-foreground"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -364,6 +450,115 @@ const Index = () => {
             </div>
           )}
         </Card>
+
+        {/* Edit Dialog */}
+        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Editar Registro</DialogTitle>
+              <DialogDescription>
+                Funcionário: {editingRecord?.employeeName} - Data:{" "}
+                {editingRecord?.date && new Date(editingRecord.date + "T00:00:00").toLocaleDateString("pt-BR")}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-entrada">Entrada</Label>
+                <Input
+                  id="edit-entrada"
+                  type="time"
+                  value={editFormData.entrada}
+                  onChange={(e) =>
+                    setEditFormData({ ...editFormData, entrada: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-saida-almoco">Saída Almoço</Label>
+                <Input
+                  id="edit-saida-almoco"
+                  type="time"
+                  value={editFormData.saidaAlmoco}
+                  onChange={(e) =>
+                    setEditFormData({ ...editFormData, saidaAlmoco: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-retorno-almoco">Retorno Almoço</Label>
+                <Input
+                  id="edit-retorno-almoco"
+                  type="time"
+                  value={editFormData.retornoAlmoco}
+                  onChange={(e) =>
+                    setEditFormData({ ...editFormData, retornoAlmoco: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-saida">Saída</Label>
+                <Input
+                  id="edit-saida"
+                  type="time"
+                  value={editFormData.saida}
+                  onChange={(e) =>
+                    setEditFormData({ ...editFormData, saida: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-password">Senha</Label>
+                <Input
+                  id="edit-password"
+                  type="password"
+                  placeholder="Digite a senha"
+                  value={editPassword}
+                  onChange={(e) => setEditPassword(e.target.value)}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={saveEditedRecord} className="bg-success hover:bg-success/90">
+                Salvar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Clear Data Dialog */}
+        <Dialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Limpar Todos os Dados</DialogTitle>
+              <DialogDescription>
+                Esta ação irá remover todos os funcionários e registros. Esta ação não pode ser desfeita.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="clear-password">Digite a senha para confirmar</Label>
+                <Input
+                  id="clear-password"
+                  type="password"
+                  placeholder="Digite a senha"
+                  value={clearPassword}
+                  onChange={(e) => setClearPassword(e.target.value)}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setClearDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={clearAllData} variant="destructive">
+                Limpar Tudo
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
