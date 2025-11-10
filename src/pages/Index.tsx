@@ -126,7 +126,7 @@ const Index = () => {
   };
 
   const markTime = (employeeName: string, type: "entrada" | "saidaAlmoco" | "retornoAlmoco" | "saida") => {
-    const today = new Date().toISOString().split("T")[0];
+    const today = filterDate || new Date().toISOString().split("T")[0];
     const currentTime = getCurrentTime();
     
     const existingRecordIndex = records.findIndex(
