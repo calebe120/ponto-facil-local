@@ -49,6 +49,9 @@ const Index = () => {
   const [periodDialogOpen, setPeriodDialogOpen] = useState(false);
   const [periodStartDate, setPeriodStartDate] = useState("");
   const [periodEndDate, setPeriodEndDate] = useState("");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [recordToDelete, setRecordToDelete] = useState<TimeRecord | null>(null);
 
   // Load data from localStorage
   useEffect(() => {
@@ -342,6 +345,28 @@ const Index = () => {
     toast.success("Registro atualizado com sucesso!");
   };
 
+  const openDeleteDialog = (record: TimeRecord) => {
+    setRecordToDelete(record);
+    setDeletePassword("");
+    setDeleteDialogOpen(true);
+  };
+
+  const deleteRecord = () => {
+    if (deletePassword !== "3255") {
+      toast.error("Senha incorreta. Ação cancelada.");
+      return;
+    }
+
+    if (!recordToDelete) return;
+
+    const updatedRecords = records.filter((r) => r.id !== recordToDelete.id);
+    setRecords(updatedRecords);
+    setDeleteDialogOpen(false);
+    setRecordToDelete(null);
+    setDeletePassword("");
+    toast.success("Registro apagado com sucesso!");
+  };
+
   // Filter records by month instead of specific date
   const getMonthRecords = () => {
     if (!filterDate) return records;
@@ -550,14 +575,24 @@ const Index = () => {
                         </span>
                       </td>
                       <td className="p-3">
-                        <Button
-                          onClick={() => openEditDialog(record)}
-                          size="sm"
-                          variant="outline"
-                          className="border-info text-info hover:bg-info hover:text-info-foreground"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={() => openEditDialog(record)}
+                            size="sm"
+                            variant="outline"
+                            className="border-info text-info hover:bg-info hover:text-info-foreground"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            onClick={() => openDeleteDialog(record)}
+                            size="sm"
+                            variant="outline"
+                            className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -680,6 +715,46 @@ const Index = () => {
               <Button onClick={exportPeriod} className="bg-success hover:bg-success/90">
                 <Download className="w-4 h-4 mr-2" />
                 Exportar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Record Dialog */}
+        <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Apagar Registro</DialogTitle>
+              <DialogDescription>
+                Tem certeza que deseja apagar este registro? Esta ação não pode ser desfeita.
+                {recordToDelete && (
+                  <div className="mt-2 text-foreground">
+                    <p><strong>Funcionário:</strong> {recordToDelete.employeeName}</p>
+                    <p><strong>Data:</strong> {new Date(recordToDelete.date + "T00:00:00").toLocaleDateString("pt-BR")}</p>
+                  </div>
+                )}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="delete-password">Digite a senha para confirmar</Label>
+                <Input
+                  id="delete-password"
+                  type="password"
+                  placeholder="Digite a senha"
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  onKeyPress={(e) => e.key === "Enter" && deleteRecord()}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={deleteRecord} variant="destructive">
+                <Trash2 className="w-4 h-4 mr-2" />
+                Apagar
               </Button>
             </DialogFooter>
           </DialogContent>
