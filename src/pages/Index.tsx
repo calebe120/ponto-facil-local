@@ -95,15 +95,15 @@ const Index = () => {
     return now.toTimeString().slice(0, 5);
   };
 
+  const timeToMinutes = (time: string) => {
+    const [h, m] = time.split(":").map(Number);
+    return h * 60 + m;
+  };
+
   const calculateTotalHours = (record: TimeRecord): { total: string; overtime: boolean } => {
     if (!record.entrada || !record.saida) {
       return { total: "--:--", overtime: false };
     }
-
-    const timeToMinutes = (time: string) => {
-      const [h, m] = time.split(":").map(Number);
-      return h * 60 + m;
-    };
 
     const entrada = timeToMinutes(record.entrada);
     const saida = timeToMinutes(record.saida);
@@ -128,6 +128,40 @@ const Index = () => {
     return {
       total: `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`,
       overtime,
+    };
+  };
+
+  const calculateBalance = (recordsList: TimeRecord[]) => {
+    let totalBalanceMinutes = 0;
+    
+    recordsList.forEach((record) => {
+      if (!record.entrada || !record.saida) return;
+      
+      const entrada = timeToMinutes(record.entrada);
+      const saida = timeToMinutes(record.saida);
+      let workedMinutes = saida - entrada;
+      
+      if (record.saidaAlmoco && record.retornoAlmoco) {
+        const saidaAlmoco = timeToMinutes(record.saidaAlmoco);
+        const retornoAlmoco = timeToMinutes(record.retornoAlmoco);
+        workedMinutes -= (retornoAlmoco - saidaAlmoco);
+      } else {
+        workedMinutes -= 60;
+      }
+      
+      // 480 minutes = 8 hours (standard workday)
+      totalBalanceMinutes += (workedMinutes - 480);
+    });
+    
+    const isPositive = totalBalanceMinutes >= 0;
+    const absMinutes = Math.abs(totalBalanceMinutes);
+    const hours = Math.floor(absMinutes / 60);
+    const minutes = absMinutes % 60;
+    
+    return {
+      formatted: `${isPositive ? "+" : "-"}${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`,
+      isPositive,
+      totalMinutes: totalBalanceMinutes,
     };
   };
 
@@ -194,6 +228,41 @@ const Index = () => {
       "Total Horas": r.totalHoras || "--:--",
     }));
 
+    const balance = calculateBalance(filteredRecords);
+    
+    // Add balance row
+    data.push({
+      Data: "",
+      Funcionário: "",
+      Entrada: "",
+      "Saída Almoço": "",
+      "Retorno Almoço": "",
+      Saída: "Saldo Total:",
+      "Total Horas": balance.formatted,
+    });
+    
+    // Add empty row
+    data.push({
+      Data: "",
+      Funcionário: "",
+      Entrada: "",
+      "Saída Almoço": "",
+      "Retorno Almoço": "",
+      Saída: "",
+      "Total Horas": "",
+    });
+    
+    // Add signature row
+    data.push({
+      Data: "Assinatura do funcionário: ________________________________",
+      Funcionário: "",
+      Entrada: "",
+      "Saída Almoço": "",
+      "Retorno Almoço": "",
+      Saída: "",
+      "Total Horas": "",
+    });
+
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Registros");
@@ -225,6 +294,41 @@ const Index = () => {
       Saída: r.saida || "--:--",
       "Total Horas": r.totalHoras || "--:--",
     }));
+
+    const balance = calculateBalance(monthRecords);
+    
+    // Add balance row
+    data.push({
+      Data: "",
+      Funcionário: "",
+      Entrada: "",
+      "Saída Almoço": "",
+      "Retorno Almoço": "",
+      Saída: "Saldo Total:",
+      "Total Horas": balance.formatted,
+    });
+    
+    // Add empty row
+    data.push({
+      Data: "",
+      Funcionário: "",
+      Entrada: "",
+      "Saída Almoço": "",
+      "Retorno Almoço": "",
+      Saída: "",
+      "Total Horas": "",
+    });
+    
+    // Add signature row
+    data.push({
+      Data: "Assinatura do funcionário: ________________________________",
+      Funcionário: "",
+      Entrada: "",
+      "Saída Almoço": "",
+      "Retorno Almoço": "",
+      Saída: "",
+      "Total Horas": "",
+    });
 
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
@@ -270,6 +374,41 @@ const Index = () => {
       Saída: r.saida || "--:--",
       "Total Horas": r.totalHoras || "--:--",
     }));
+
+    const balance = calculateBalance(periodRecords);
+    
+    // Add balance row
+    data.push({
+      Data: "",
+      Funcionário: "",
+      Entrada: "",
+      "Saída Almoço": "",
+      "Retorno Almoço": "",
+      Saída: "Saldo Total:",
+      "Total Horas": balance.formatted,
+    });
+    
+    // Add empty row
+    data.push({
+      Data: "",
+      Funcionário: "",
+      Entrada: "",
+      "Saída Almoço": "",
+      "Retorno Almoço": "",
+      Saída: "",
+      "Total Horas": "",
+    });
+    
+    // Add signature row
+    data.push({
+      Data: "Assinatura do funcionário: ________________________________",
+      Funcionário: "",
+      Entrada: "",
+      "Saída Almoço": "",
+      "Retorno Almoço": "",
+      Saída: "",
+      "Total Horas": "",
+    });
 
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
@@ -537,68 +676,85 @@ const Index = () => {
               Nenhum registro encontrado para este mês
             </p>
           ) : (
-            <div className="overflow-x-auto max-h-[600px] overflow-y-auto border border-border rounded-md">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left p-3 font-semibold">Data</th>
-                    <th className="text-left p-3 font-semibold">Funcionário</th>
-                    <th className="text-left p-3 font-semibold">Entrada</th>
-                    <th className="text-left p-3 font-semibold">Saída Almoço</th>
-                    <th className="text-left p-3 font-semibold">Retorno</th>
-                    <th className="text-left p-3 font-semibold">Saída</th>
-                    <th className="text-left p-3 font-semibold">Total Horas</th>
-                    <th className="text-left p-3 font-semibold">Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredRecords.map((record) => (
-                    <tr key={record.id} className="border-b border-border hover:bg-muted/50">
-                      <td className="p-3">
-                        {new Date(record.date + "T00:00:00").toLocaleDateString("pt-BR")}
-                      </td>
-                      <td className="p-3 font-medium">{record.employeeName}</td>
-                      <td className="p-3">{record.entrada || "--:--"}</td>
-                      <td className="p-3">{record.saidaAlmoco || "--:--"}</td>
-                      <td className="p-3">{record.retornoAlmoco || "--:--"}</td>
-                      <td className="p-3">{record.saida || "--:--"}</td>
-                      <td className="p-3">
-                        <span
-                          className={`font-semibold ${
-                            record.horasExtras
-                              ? "text-overtime"
-                              : "text-success"
-                          }`}
-                        >
-                          {record.totalHoras || "--:--"}
-                          {record.horasExtras && " ⚠️"}
-                        </span>
-                      </td>
-                      <td className="p-3">
-                        <div className="flex gap-2">
-                          <Button
-                            onClick={() => openEditDialog(record)}
-                            size="sm"
-                            variant="outline"
-                            className="border-info text-info hover:bg-info hover:text-info-foreground"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            onClick={() => openDeleteDialog(record)}
-                            size="sm"
-                            variant="outline"
-                            className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </td>
+            <>
+              <div className="overflow-x-auto max-h-[600px] overflow-y-auto border border-border rounded-md">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left p-3 font-semibold">Data</th>
+                      <th className="text-left p-3 font-semibold">Funcionário</th>
+                      <th className="text-left p-3 font-semibold">Entrada</th>
+                      <th className="text-left p-3 font-semibold">Saída Almoço</th>
+                      <th className="text-left p-3 font-semibold">Retorno</th>
+                      <th className="text-left p-3 font-semibold">Saída</th>
+                      <th className="text-left p-3 font-semibold">Total Horas</th>
+                      <th className="text-left p-3 font-semibold">Ações</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {filteredRecords.map((record) => (
+                      <tr key={record.id} className="border-b border-border hover:bg-muted/50">
+                        <td className="p-3">
+                          {new Date(record.date + "T00:00:00").toLocaleDateString("pt-BR")}
+                        </td>
+                        <td className="p-3 font-medium">{record.employeeName}</td>
+                        <td className="p-3">{record.entrada || "--:--"}</td>
+                        <td className="p-3">{record.saidaAlmoco || "--:--"}</td>
+                        <td className="p-3">{record.retornoAlmoco || "--:--"}</td>
+                        <td className="p-3">{record.saida || "--:--"}</td>
+                        <td className="p-3">
+                          <span
+                            className={`font-semibold ${
+                              record.horasExtras
+                                ? "text-overtime"
+                                : "text-success"
+                            }`}
+                          >
+                            {record.totalHoras || "--:--"}
+                            {record.horasExtras && " ⚠️"}
+                          </span>
+                        </td>
+                        <td className="p-3">
+                          <div className="flex gap-2">
+                            <Button
+                              onClick={() => openEditDialog(record)}
+                              size="sm"
+                              variant="outline"
+                              className="border-info text-info hover:bg-info hover:text-info-foreground"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              onClick={() => openDeleteDialog(record)}
+                              size="sm"
+                              variant="outline"
+                              className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              
+              {/* Monthly Balance Summary */}
+              <div className="mt-4 p-4 bg-muted/50 rounded-lg border border-border">
+                <div className="flex items-center justify-between">
+                  <span className="text-lg font-semibold">Saldo do Período:</span>
+                  <span className={`text-2xl font-bold ${
+                    calculateBalance(filteredRecords).isPositive 
+                      ? "text-success" 
+                      : "text-destructive"
+                  }`}>
+                    {calculateBalance(filteredRecords).formatted}
+                    {calculateBalance(filteredRecords).isPositive ? " (horas extras)" : " (horas faltantes)"}
+                  </span>
+                </div>
+              </div>
+            </>
           )}
         </Card>
 
