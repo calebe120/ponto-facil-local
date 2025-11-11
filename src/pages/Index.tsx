@@ -342,9 +342,22 @@ const Index = () => {
     toast.success("Registro atualizado com sucesso!");
   };
 
-  const filteredRecords = filterDate
-    ? records.filter((r) => r.date === filterDate)
-    : records;
+  // Filter records by month instead of specific date
+  const getMonthRecords = () => {
+    if (!filterDate) return records;
+    
+    const selectedDate = new Date(filterDate + "T00:00:00");
+    const year = selectedDate.getFullYear();
+    const month = selectedDate.getMonth();
+    const firstDay = new Date(year, month, 1).toISOString().split("T")[0];
+    const lastDay = new Date(year, month + 1, 0).toISOString().split("T")[0];
+    
+    return records
+      .filter((r) => r.date >= firstDay && r.date <= lastDay)
+      .sort((a, b) => a.date.localeCompare(b.date)); // Sort chronologically
+  };
+
+  const filteredRecords = getMonthRecords();
 
   const currentDate = new Date().toLocaleDateString("pt-BR", {
     weekday: "long",
@@ -352,6 +365,10 @@ const Index = () => {
     month: "long",
     day: "numeric",
   });
+
+  const selectedMonthName = filterDate 
+    ? new Date(filterDate + "T00:00:00").toLocaleDateString("pt-BR", { month: "long", year: "numeric" })
+    : "Todos os registros";
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
@@ -449,7 +466,12 @@ const Index = () => {
         {/* Records Table */}
         <Card className="p-6 shadow-lg">
           <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-            <h2 className="text-2xl font-semibold">Registros de Ponto</h2>
+            <div>
+              <h2 className="text-2xl font-semibold">Registros de Ponto</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Visualizando: {selectedMonthName}
+              </p>
+            </div>
             <div className="flex flex-wrap gap-3">
               <div className="flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-muted-foreground" />
@@ -458,6 +480,7 @@ const Index = () => {
                   value={filterDate}
                   onChange={(e) => setFilterDate(e.target.value)}
                   className="w-auto"
+                  title="Selecione qualquer dia para ver o mês inteiro"
                 />
               </div>
               <Button onClick={exportToXLS} variant="outline" size="sm">
@@ -486,10 +509,10 @@ const Index = () => {
 
           {filteredRecords.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">
-              Nenhum registro encontrado para esta data
+              Nenhum registro encontrado para este mês
             </p>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto max-h-[600px] overflow-y-auto border border-border rounded-md">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border">
