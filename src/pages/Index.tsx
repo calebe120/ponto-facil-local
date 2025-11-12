@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Clock, Users, Download, Trash2, Calendar, Edit } from "lucide-react";
+import { Clock, Users, Download, Trash2, Calendar, Edit, LogOut } from "lucide-react";
 import * as XLSX from "xlsx";
 import {
   Dialog,
@@ -15,22 +17,25 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import logoCvc from "@/assets/logo-cvc.jpeg";
+import type { Session, User } from "@supabase/supabase-js";
 
 interface TimeRecord {
   id: string;
-  employeeName: string;
+  user_id: string;
+  employee_name: string;
   date: string;
-  entrada?: string;
-  saidaAlmoco?: string;
-  retornoAlmoco?: string;
-  saida?: string;
-  totalHoras?: string;
-  horasExtras?: boolean;
+  entry_time: string;
+  exit_time: string;
+  total_hours: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 const Index = () => {
-  const [employees, setEmployees] = useState<string[]>([]);
-  const [newEmployeeName, setNewEmployeeName] = useState("");
+  const navigate = useNavigate();
+  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
   const [records, setRecords] = useState<TimeRecord[]>([]);
   const [filterDate, setFilterDate] = useState(
     new Date().toISOString().split("T")[0]
@@ -39,10 +44,8 @@ const Index = () => {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editPassword, setEditPassword] = useState("");
   const [editFormData, setEditFormData] = useState({
-    entrada: "",
-    saidaAlmoco: "",
-    retornoAlmoco: "",
-    saida: "",
+    entry_time: "",
+    exit_time: "",
   });
   const [clearPassword, setClearPassword] = useState("");
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
@@ -52,42 +55,66 @@ const Index = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
   const [recordToDelete, setRecordToDelete] = useState<TimeRecord | null>(null);
+  const [employeeName, setEmployeeName] = useState("");
 
-  // Load data from localStorage
+  // Auth check
   useEffect(() => {
-    const savedEmployees = localStorage.getItem("employees");
-    const savedRecords = localStorage.getItem("timeRecords");
-    if (savedEmployees) setEmployees(JSON.parse(savedEmployees));
-    if (savedRecords) setRecords(JSON.parse(savedRecords));
-  }, []);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      
+      if (!session) {
+        navigate("/auth");
+      } else {
+        // Get employee name from user metadata
+        setEmployeeName(session.user.user_metadata?.employee_name || session.user.email || "");
+        setLoading(false);
+      }
+    });
 
-  // Save employees to localStorage
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      
+      if (!session) {
+        navigate("/auth");
+      } else {
+        setEmployeeName(session.user.user_metadata?.employee_name || session.user.email || "");
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+
+  // Load records from database
   useEffect(() => {
-    localStorage.setItem("employees", JSON.stringify(employees));
-  }, [employees]);
-
-  // Save records to localStorage
-  useEffect(() => {
-    localStorage.setItem("timeRecords", JSON.stringify(records));
-  }, [records]);
-
-  const addEmployee = () => {
-    if (!newEmployeeName.trim()) {
-      toast.error("Digite o nome do funcionário");
-      return;
+    if (user) {
+      loadRecords();
     }
-    if (employees.includes(newEmployeeName.trim())) {
-      toast.error("Funcionário já cadastrado");
-      return;
+  }, [user]);
+
+  const loadRecords = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from("time_records")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("date", { ascending: false });
+
+      if (error) throw error;
+
+      setRecords(data || []);
+    } catch (error: any) {
+      console.error("Error loading records:", error);
+      toast.error("Erro ao carregar registros");
     }
-    setEmployees([...employees, newEmployeeName.trim()]);
-    setNewEmployeeName("");
-    toast.success("Funcionário adicionado com sucesso!");
   };
 
-  const removeEmployee = (name: string) => {
-    setEmployees(employees.filter((e) => e !== name));
-    toast.success("Funcionário removido");
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate("/auth");
   };
 
   const getCurrentTime = () => {
@@ -100,25 +127,18 @@ const Index = () => {
     return h * 60 + m;
   };
 
-  const calculateTotalHours = (record: TimeRecord): { total: string; overtime: boolean } => {
-    if (!record.entrada || !record.saida) {
+  const calculateTotalHours = (entryTime: string, exitTime: string): { total: string; overtime: boolean } => {
+    if (!entryTime || !exitTime) {
       return { total: "--:--", overtime: false };
     }
 
-    const entrada = timeToMinutes(record.entrada);
-    const saida = timeToMinutes(record.saida);
+    const entrada = timeToMinutes(entryTime);
+    const saida = timeToMinutes(exitTime);
     
     let totalMinutes = saida - entrada;
     
     // Subtract lunch break (1 hour = 60 minutes)
-    if (record.saidaAlmoco && record.retornoAlmoco) {
-      const saidaAlmoco = timeToMinutes(record.saidaAlmoco);
-      const retornoAlmoco = timeToMinutes(record.retornoAlmoco);
-      const lunchMinutes = retornoAlmoco - saidaAlmoco;
-      totalMinutes -= lunchMinutes;
-    } else {
-      totalMinutes -= 60; // Default 1 hour lunch
-    }
+    totalMinutes -= 60;
 
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
@@ -135,19 +155,13 @@ const Index = () => {
     let totalBalanceMinutes = 0;
     
     recordsList.forEach((record) => {
-      if (!record.entrada || !record.saida) return;
+      if (!record.entry_time || !record.exit_time) return;
       
-      const entrada = timeToMinutes(record.entrada);
-      const saida = timeToMinutes(record.saida);
+      const entrada = timeToMinutes(record.entry_time);
+      const saida = timeToMinutes(record.exit_time);
       let workedMinutes = saida - entrada;
       
-      if (record.saidaAlmoco && record.retornoAlmoco) {
-        const saidaAlmoco = timeToMinutes(record.saidaAlmoco);
-        const retornoAlmoco = timeToMinutes(record.retornoAlmoco);
-        workedMinutes -= (retornoAlmoco - saidaAlmoco);
-      } else {
-        workedMinutes -= 60;
-      }
+      workedMinutes -= 60; // lunch break
       
       // 480 minutes = 8 hours (standard workday)
       totalBalanceMinutes += (workedMinutes - 480);
@@ -165,78 +179,113 @@ const Index = () => {
     };
   };
 
-  const markTime = (employeeName: string, type: "entrada" | "saidaAlmoco" | "retornoAlmoco" | "saida") => {
+  const markEntry = async () => {
+    if (!user) return;
+    
     const today = filterDate || new Date().toISOString().split("T")[0];
     const currentTime = getCurrentTime();
-    
-    const existingRecordIndex = records.findIndex(
-      (r) => r.employeeName === employeeName && r.date === today
-    );
 
-    let updatedRecords = [...records];
+    try {
+      // Check if record already exists for today
+      const { data: existing } = await supabase
+        .from("time_records")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("date", today)
+        .single();
 
-    if (existingRecordIndex >= 0) {
-      updatedRecords[existingRecordIndex] = {
-        ...updatedRecords[existingRecordIndex],
-        [type]: currentTime,
-      };
-    } else {
-      const newRecord: TimeRecord = {
-        id: `${employeeName}-${today}-${Date.now()}`,
-        employeeName,
-        date: today,
-        [type]: currentTime,
-      };
-      updatedRecords = [newRecord, ...updatedRecords];
+      if (existing) {
+        toast.error("Já existe um registro de entrada para hoje");
+        return;
+      }
+
+      const { error } = await supabase
+        .from("time_records")
+        .insert({
+          user_id: user.id,
+          employee_name: employeeName,
+          date: today,
+          entry_time: currentTime,
+          exit_time: "",
+          total_hours: "--:--",
+        });
+
+      if (error) throw error;
+
+      toast.success(`Entrada registrada: ${currentTime}`);
+      await loadRecords();
+    } catch (error: any) {
+      console.error("Error marking entry:", error);
+      toast.error("Erro ao registrar entrada");
     }
-
-    // Calculate total hours
-    const record = updatedRecords[existingRecordIndex >= 0 ? existingRecordIndex : 0];
-    const { total, overtime } = calculateTotalHours(record);
-    record.totalHoras = total;
-    record.horasExtras = overtime;
-
-    setRecords(updatedRecords);
-    
-    const typeLabels = {
-      entrada: "Entrada",
-      saidaAlmoco: "Saída para Almoço",
-      retornoAlmoco: "Retorno do Almoço",
-      saida: "Saída",
-    };
-    
-    toast.success(`${typeLabels[type]} registrada: ${currentTime}`);
   };
 
-  const exportToXLS = () => {
-    const filteredRecords = filterDate
-      ? records.filter((r) => r.date === filterDate)
-      : records;
+  const markExit = async () => {
+    if (!user) return;
+    
+    const today = filterDate || new Date().toISOString().split("T")[0];
+    const currentTime = getCurrentTime();
 
-    if (filteredRecords.length === 0) {
+    try {
+      // Find today's record
+      const { data: existing } = await supabase
+        .from("time_records")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("date", today)
+        .single();
+
+      if (!existing) {
+        toast.error("Você precisa registrar a entrada primeiro");
+        return;
+      }
+
+      if (existing.exit_time) {
+        toast.error("Saída já foi registrada hoje");
+        return;
+      }
+
+      const { total, overtime } = calculateTotalHours(existing.entry_time, currentTime);
+
+      const { error } = await supabase
+        .from("time_records")
+        .update({
+          exit_time: currentTime,
+          total_hours: total,
+        })
+        .eq("id", existing.id);
+
+      if (error) throw error;
+
+      toast.success(`Saída registrada: ${currentTime}`);
+      await loadRecords();
+    } catch (error: any) {
+      console.error("Error marking exit:", error);
+      toast.error("Erro ao registrar saída");
+    }
+  };
+
+  const exportToXLS = (recordsToExport: TimeRecord[], filename: string) => {
+    if (recordsToExport.length === 0) {
       toast.error("Nenhum registro para exportar");
       return;
     }
 
-    const data = filteredRecords.map((r) => ({
+    const data = recordsToExport.map((r) => ({
       Data: new Date(r.date + "T00:00:00").toLocaleDateString("pt-BR"),
-      Funcionário: r.employeeName,
-      Entrada: r.entrada || "--:--",
-      "Saída Almoço": r.saidaAlmoco || "--:--",
-      "Retorno Almoço": r.retornoAlmoco || "--:--",
-      Saída: r.saida || "--:--",
-      "Total Horas": r.totalHoras || "--:--",
+      Funcionário: r.employee_name,
+      Entrada: r.entry_time || "--:--",
+      Saída: r.exit_time || "--:--",
+      "Total Horas": r.total_hours || "--:--",
     }));
 
-    const balance = calculateBalance(filteredRecords);
+    const balance = calculateBalance(recordsToExport);
     
     // Add balance row
     data.push({
       Data: "",
       Funcionário: "",
       Entrada: "",
-      "Saída Almoço": "",
-      "Retorno Almoço": "",
       Saída: "Saldo Total:",
       "Total Horas": balance.formatted,
     });
@@ -246,8 +295,6 @@ const Index = () => {
       Data: "",
       Funcionário: "",
       Entrada: "",
-      "Saída Almoço": "",
-      "Retorno Almoço": "",
       Saída: "",
       "Total Horas": "",
     });
@@ -257,8 +304,6 @@ const Index = () => {
       Data: "Assinatura do funcionário: ________________________________",
       Funcionário: "",
       Entrada: "",
-      "Saída Almoço": "",
-      "Retorno Almoço": "",
       Saída: "",
       "Total Horas": "",
     });
@@ -267,7 +312,7 @@ const Index = () => {
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Registros");
     
-    XLSX.writeFile(workbook, `registros-ponto-${filterDate || "todos"}.xlsx`);
+    XLSX.writeFile(workbook, filename);
     toast.success("Excel exportado com sucesso!");
   };
 
@@ -285,58 +330,8 @@ const Index = () => {
       return;
     }
 
-    const data = monthRecords.map((r) => ({
-      Data: new Date(r.date + "T00:00:00").toLocaleDateString("pt-BR"),
-      Funcionário: r.employeeName,
-      Entrada: r.entrada || "--:--",
-      "Saída Almoço": r.saidaAlmoco || "--:--",
-      "Retorno Almoço": r.retornoAlmoco || "--:--",
-      Saída: r.saida || "--:--",
-      "Total Horas": r.totalHoras || "--:--",
-    }));
-
-    const balance = calculateBalance(monthRecords);
-    
-    // Add balance row
-    data.push({
-      Data: "",
-      Funcionário: "",
-      Entrada: "",
-      "Saída Almoço": "",
-      "Retorno Almoço": "",
-      Saída: "Saldo Total:",
-      "Total Horas": balance.formatted,
-    });
-    
-    // Add empty row
-    data.push({
-      Data: "",
-      Funcionário: "",
-      Entrada: "",
-      "Saída Almoço": "",
-      "Retorno Almoço": "",
-      Saída: "",
-      "Total Horas": "",
-    });
-    
-    // Add signature row
-    data.push({
-      Data: "Assinatura do funcionário: ________________________________",
-      Funcionário: "",
-      Entrada: "",
-      "Saída Almoço": "",
-      "Retorno Almoço": "",
-      Saída: "",
-      "Total Horas": "",
-    });
-
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Registros");
-    
     const monthName = today.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
-    XLSX.writeFile(workbook, `registros-ponto-${monthName}.xlsx`);
-    toast.success("Excel do mês exportado com sucesso!");
+    exportToXLS(monthRecords, `registros-ponto-${monthName}.xlsx`);
   };
 
   const openPeriodDialog = () => {
@@ -365,57 +360,7 @@ const Index = () => {
       return;
     }
 
-    const data = periodRecords.map((r) => ({
-      Data: new Date(r.date + "T00:00:00").toLocaleDateString("pt-BR"),
-      Funcionário: r.employeeName,
-      Entrada: r.entrada || "--:--",
-      "Saída Almoço": r.saidaAlmoco || "--:--",
-      "Retorno Almoço": r.retornoAlmoco || "--:--",
-      Saída: r.saida || "--:--",
-      "Total Horas": r.totalHoras || "--:--",
-    }));
-
-    const balance = calculateBalance(periodRecords);
-    
-    // Add balance row
-    data.push({
-      Data: "",
-      Funcionário: "",
-      Entrada: "",
-      "Saída Almoço": "",
-      "Retorno Almoço": "",
-      Saída: "Saldo Total:",
-      "Total Horas": balance.formatted,
-    });
-    
-    // Add empty row
-    data.push({
-      Data: "",
-      Funcionário: "",
-      Entrada: "",
-      "Saída Almoço": "",
-      "Retorno Almoço": "",
-      Saída: "",
-      "Total Horas": "",
-    });
-    
-    // Add signature row
-    data.push({
-      Data: "Assinatura do funcionário: ________________________________",
-      Funcionário: "",
-      Entrada: "",
-      "Saída Almoço": "",
-      "Retorno Almoço": "",
-      Saída: "",
-      "Total Horas": "",
-    });
-
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Registros");
-    
-    XLSX.writeFile(workbook, `registros-ponto-${periodStartDate}_${periodEndDate}.xlsx`);
-    toast.success("Excel do período exportado com sucesso!");
+    exportToXLS(periodRecords, `registros-ponto-${periodStartDate}_${periodEndDate}.xlsx`);
     setPeriodDialogOpen(false);
   };
 
@@ -424,33 +369,43 @@ const Index = () => {
     setClearPassword("");
   };
 
-  const clearAllData = () => {
+  const clearAllData = async () => {
     if (clearPassword !== "3255") {
       toast.error("Senha incorreta");
       return;
     }
-    setEmployees([]);
-    setRecords([]);
-    localStorage.removeItem("employees");
-    localStorage.removeItem("timeRecords");
-    toast.success("Todos os dados foram limpos");
-    setClearDialogOpen(false);
-    setClearPassword("");
+
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from("time_records")
+        .delete()
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+
+      toast.success("Todos os dados foram limpos");
+      setClearDialogOpen(false);
+      setClearPassword("");
+      await loadRecords();
+    } catch (error: any) {
+      console.error("Error clearing data:", error);
+      toast.error("Erro ao limpar dados");
+    }
   };
 
   const openEditDialog = (record: TimeRecord) => {
     setEditingRecord(record);
     setEditFormData({
-      entrada: record.entrada || "",
-      saidaAlmoco: record.saidaAlmoco || "",
-      retornoAlmoco: record.retornoAlmoco || "",
-      saida: record.saida || "",
+      entry_time: record.entry_time || "",
+      exit_time: record.exit_time || "",
     });
     setEditPassword("");
     setEditDialogOpen(true);
   };
 
-  const saveEditedRecord = () => {
+  const saveEditedRecord = async () => {
     if (editPassword !== "3255") {
       toast.error("Senha incorreta");
       return;
@@ -458,30 +413,29 @@ const Index = () => {
 
     if (!editingRecord) return;
 
-    const updatedRecords = records.map((r) => {
-      if (r.id === editingRecord.id) {
-        const updatedRecord = {
-          ...r,
-          entrada: editFormData.entrada,
-          saidaAlmoco: editFormData.saidaAlmoco,
-          retornoAlmoco: editFormData.retornoAlmoco,
-          saida: editFormData.saida,
-        };
-        
-        const { total, overtime } = calculateTotalHours(updatedRecord);
-        updatedRecord.totalHoras = total;
-        updatedRecord.horasExtras = overtime;
-        
-        return updatedRecord;
-      }
-      return r;
-    });
+    try {
+      const { total, overtime } = calculateTotalHours(editFormData.entry_time, editFormData.exit_time);
 
-    setRecords(updatedRecords);
-    setEditDialogOpen(false);
-    setEditingRecord(null);
-    setEditPassword("");
-    toast.success("Registro atualizado com sucesso!");
+      const { error } = await supabase
+        .from("time_records")
+        .update({
+          entry_time: editFormData.entry_time,
+          exit_time: editFormData.exit_time,
+          total_hours: total,
+        })
+        .eq("id", editingRecord.id);
+
+      if (error) throw error;
+
+      setEditDialogOpen(false);
+      setEditingRecord(null);
+      setEditPassword("");
+      toast.success("Registro atualizado com sucesso!");
+      await loadRecords();
+    } catch (error: any) {
+      console.error("Error updating record:", error);
+      toast.error("Erro ao atualizar registro");
+    }
   };
 
   const openDeleteDialog = (record: TimeRecord) => {
@@ -490,7 +444,7 @@ const Index = () => {
     setDeleteDialogOpen(true);
   };
 
-  const deleteRecord = () => {
+  const deleteRecord = async () => {
     if (deletePassword !== "3255") {
       toast.error("Senha incorreta. Ação cancelada.");
       return;
@@ -498,12 +452,23 @@ const Index = () => {
 
     if (!recordToDelete) return;
 
-    const updatedRecords = records.filter((r) => r.id !== recordToDelete.id);
-    setRecords(updatedRecords);
-    setDeleteDialogOpen(false);
-    setRecordToDelete(null);
-    setDeletePassword("");
-    toast.success("Registro apagado com sucesso!");
+    try {
+      const { error } = await supabase
+        .from("time_records")
+        .delete()
+        .eq("id", recordToDelete.id);
+
+      if (error) throw error;
+
+      setDeleteDialogOpen(false);
+      setRecordToDelete(null);
+      setDeletePassword("");
+      toast.success("Registro apagado com sucesso!");
+      await loadRecords();
+    } catch (error: any) {
+      console.error("Error deleting record:", error);
+      toast.error("Erro ao apagar registro");
+    }
   };
 
   // Filter records by month instead of specific date
@@ -534,98 +499,54 @@ const Index = () => {
     ? new Date(filterDate + "T00:00:00").toLocaleDateString("pt-BR", { month: "long", year: "numeric" })
     : "Todos os registros";
 
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-xl">Carregando...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="text-center space-y-4">
-          <div className="flex items-center justify-center gap-4">
-            <img src={logoCvc} alt="CVC Logo" className="w-24 h-24 object-contain" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center justify-center gap-4 flex-1">
+              <img src={logoCvc} alt="CVC Logo" className="w-24 h-24 object-contain" />
+            </div>
+            <Button onClick={handleLogout} variant="outline" size="sm">
+              <LogOut className="w-4 h-4 mr-2" />
+              Sair
+            </Button>
           </div>
           <h1 className="text-4xl font-bold text-foreground flex items-center justify-center gap-3">
             <Clock className="w-10 h-10 text-accent" />
             Sistema de Controle de Ponto
           </h1>
           <p className="text-muted-foreground capitalize">{currentDate}</p>
+          <p className="text-lg font-semibold">Olá, {employeeName}!</p>
         </div>
 
-        {/* Employee Registration */}
+        {/* Time Marking */}
         <Card className="p-6 shadow-lg">
-          <h2 className="text-2xl font-semibold mb-4 flex items-center gap-2">
-            <Users className="w-6 h-6 text-success" />
-            Cadastro de Funcionários
-          </h2>
-          <div className="flex gap-3">
-            <Input
-              type="text"
-              placeholder="Digite o nome do funcionário"
-              value={newEmployeeName}
-              onChange={(e) => setNewEmployeeName(e.target.value)}
-              onKeyPress={(e) => e.key === "Enter" && addEmployee()}
-              className="flex-1"
-            />
-            <Button onClick={addEmployee} className="bg-success hover:bg-success/90">
-              Adicionar
+          <h2 className="text-2xl font-semibold mb-4">Marcação de Ponto</h2>
+          <div className="flex flex-wrap gap-3 justify-center">
+            <Button
+              onClick={markEntry}
+              className="bg-success hover:bg-success/90"
+            >
+              Registrar Entrada
+            </Button>
+            <Button
+              onClick={markExit}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              Registrar Saída
             </Button>
           </div>
         </Card>
-
-        {/* Time Marking */}
-        {employees.length > 0 && (
-          <Card className="p-6 shadow-lg">
-            <h2 className="text-2xl font-semibold mb-4">Marcação de Ponto</h2>
-            <div className="space-y-4">
-              {employees.map((emp) => (
-                <div
-                  key={emp}
-                  className="flex flex-wrap items-center gap-3 p-4 bg-muted rounded-lg"
-                >
-                  <span className="font-medium text-foreground flex-1 min-w-[150px]">
-                    {emp}
-                  </span>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      onClick={() => markTime(emp, "entrada")}
-                      size="sm"
-                      className="bg-success hover:bg-success/90"
-                    >
-                      Entrada
-                    </Button>
-                    <Button
-                      onClick={() => markTime(emp, "saidaAlmoco")}
-                      size="sm"
-                      className="bg-warning hover:bg-warning/90"
-                    >
-                      Saída Almoço
-                    </Button>
-                    <Button
-                      onClick={() => markTime(emp, "retornoAlmoco")}
-                      size="sm"
-                      className="bg-info hover:bg-info/90"
-                    >
-                      Retorno Almoço
-                    </Button>
-                    <Button
-                      onClick={() => markTime(emp, "saida")}
-                      size="sm"
-                      className="bg-destructive hover:bg-destructive/90"
-                    >
-                      Saída
-                    </Button>
-                    <Button
-                      onClick={() => removeEmployee(emp)}
-                      size="sm"
-                      variant="outline"
-                      className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-        )}
 
         {/* Records Table */}
         <Card className="p-6 shadow-lg">
@@ -647,10 +568,6 @@ const Index = () => {
                   title="Selecione qualquer dia para ver o mês inteiro"
                 />
               </div>
-              <Button onClick={exportToXLS} variant="outline" size="sm">
-                <Download className="w-4 h-4 mr-2" />
-                Exportar Dia
-              </Button>
               <Button onClick={exportCurrentMonth} variant="outline" size="sm">
                 <Download className="w-4 h-4 mr-2" />
                 Exportar Mês Atual
@@ -680,62 +597,59 @@ const Index = () => {
               <div className="overflow-x-auto max-h-[600px] overflow-y-auto border border-border rounded-md">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-border">
+                    <tr className="border-b border-border bg-muted">
                       <th className="text-left p-3 font-semibold">Data</th>
-                      <th className="text-left p-3 font-semibold">Funcionário</th>
                       <th className="text-left p-3 font-semibold">Entrada</th>
-                      <th className="text-left p-3 font-semibold">Saída Almoço</th>
-                      <th className="text-left p-3 font-semibold">Retorno</th>
                       <th className="text-left p-3 font-semibold">Saída</th>
                       <th className="text-left p-3 font-semibold">Total Horas</th>
                       <th className="text-left p-3 font-semibold">Ações</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredRecords.map((record) => (
-                      <tr key={record.id} className="border-b border-border hover:bg-muted/50">
-                        <td className="p-3">
-                          {new Date(record.date + "T00:00:00").toLocaleDateString("pt-BR")}
-                        </td>
-                        <td className="p-3 font-medium">{record.employeeName}</td>
-                        <td className="p-3">{record.entrada || "--:--"}</td>
-                        <td className="p-3">{record.saidaAlmoco || "--:--"}</td>
-                        <td className="p-3">{record.retornoAlmoco || "--:--"}</td>
-                        <td className="p-3">{record.saida || "--:--"}</td>
-                        <td className="p-3">
-                          <span
-                            className={`font-semibold ${
-                              record.horasExtras
-                                ? "text-overtime"
-                                : "text-success"
-                            }`}
-                          >
-                            {record.totalHoras || "--:--"}
-                            {record.horasExtras && " ⚠️"}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          <div className="flex gap-2">
-                            <Button
-                              onClick={() => openEditDialog(record)}
-                              size="sm"
-                              variant="outline"
-                              className="border-info text-info hover:bg-info hover:text-info-foreground"
+                    {filteredRecords.map((record) => {
+                      const { total, overtime } = calculateTotalHours(record.entry_time, record.exit_time);
+                      return (
+                        <tr key={record.id} className="border-b border-border hover:bg-muted/50">
+                          <td className="p-3">
+                            {new Date(record.date + "T00:00:00").toLocaleDateString("pt-BR")}
+                          </td>
+                          <td className="p-3">{record.entry_time || "--:--"}</td>
+                          <td className="p-3">{record.exit_time || "--:--"}</td>
+                          <td className="p-3">
+                            <span
+                              className={`font-semibold ${
+                                overtime
+                                  ? "text-overtime"
+                                  : "text-success"
+                              }`}
                             >
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              onClick={() => openDeleteDialog(record)}
-                              size="sm"
-                              variant="outline"
-                              className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                              {total}
+                              {overtime && " ⚠️"}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <div className="flex gap-2">
+                              <Button
+                                onClick={() => openEditDialog(record)}
+                                size="sm"
+                                variant="outline"
+                                className="border-info text-info hover:bg-info hover:text-info-foreground"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                onClick={() => openDeleteDialog(record)}
+                                size="sm"
+                                variant="outline"
+                                className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -764,52 +678,29 @@ const Index = () => {
             <DialogHeader>
               <DialogTitle>Editar Registro</DialogTitle>
               <DialogDescription>
-                Funcionário: {editingRecord?.employeeName} - Data:{" "}
-                {editingRecord?.date && new Date(editingRecord.date + "T00:00:00").toLocaleDateString("pt-BR")}
+                Data: {editingRecord?.date && new Date(editingRecord.date + "T00:00:00").toLocaleDateString("pt-BR")}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="edit-entrada">Entrada</Label>
+                <Label htmlFor="edit-entry">Entrada</Label>
                 <Input
-                  id="edit-entrada"
+                  id="edit-entry"
                   type="time"
-                  value={editFormData.entrada}
+                  value={editFormData.entry_time}
                   onChange={(e) =>
-                    setEditFormData({ ...editFormData, entrada: e.target.value })
+                    setEditFormData({ ...editFormData, entry_time: e.target.value })
                   }
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit-saida-almoco">Saída Almoço</Label>
+                <Label htmlFor="edit-exit">Saída</Label>
                 <Input
-                  id="edit-saida-almoco"
+                  id="edit-exit"
                   type="time"
-                  value={editFormData.saidaAlmoco}
+                  value={editFormData.exit_time}
                   onChange={(e) =>
-                    setEditFormData({ ...editFormData, saidaAlmoco: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-retorno-almoco">Retorno Almoço</Label>
-                <Input
-                  id="edit-retorno-almoco"
-                  type="time"
-                  value={editFormData.retornoAlmoco}
-                  onChange={(e) =>
-                    setEditFormData({ ...editFormData, retornoAlmoco: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-saida">Saída</Label>
-                <Input
-                  id="edit-saida"
-                  type="time"
-                  value={editFormData.saida}
-                  onChange={(e) =>
-                    setEditFormData({ ...editFormData, saida: e.target.value })
+                    setEditFormData({ ...editFormData, exit_time: e.target.value })
                   }
                 />
               </div>
@@ -885,7 +776,6 @@ const Index = () => {
                 Tem certeza que deseja apagar este registro? Esta ação não pode ser desfeita.
                 {recordToDelete && (
                   <div className="mt-2 text-foreground">
-                    <p><strong>Funcionário:</strong> {recordToDelete.employeeName}</p>
                     <p><strong>Data:</strong> {new Date(recordToDelete.date + "T00:00:00").toLocaleDateString("pt-BR")}</p>
                   </div>
                 )}
@@ -922,7 +812,8 @@ const Index = () => {
             <DialogHeader>
               <DialogTitle>Limpar Todos os Dados</DialogTitle>
               <DialogDescription>
-                Esta ação irá remover todos os funcionários e registros. Esta ação não pode ser desfeita.
+                Atenção! Esta ação irá apagar permanentemente todos os seus registros de ponto.
+                Esta ação não pode ser desfeita.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
@@ -934,6 +825,7 @@ const Index = () => {
                   placeholder="Digite a senha"
                   value={clearPassword}
                   onChange={(e) => setClearPassword(e.target.value)}
+                  onKeyPress={(e) => e.key === "Enter" && clearAllData()}
                 />
               </div>
             </div>
@@ -942,6 +834,7 @@ const Index = () => {
                 Cancelar
               </Button>
               <Button onClick={clearAllData} variant="destructive">
+                <Trash2 className="w-4 h-4 mr-2" />
                 Limpar Tudo
               </Button>
             </DialogFooter>
