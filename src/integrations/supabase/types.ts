@@ -19,10 +19,12 @@ export type Database = {
           created_at: string
           date: string
           employee_name: string
-          entry_time: string
-          exit_time: string
+          entry_time: string | null
+          exit_time: string | null
           id: string
-          total_hours: string
+          lunch_exit_time: string | null
+          lunch_return_time: string | null
+          total_hours: string | null
           updated_at: string
           user_id: string
         }
@@ -30,10 +32,12 @@ export type Database = {
           created_at?: string
           date: string
           employee_name: string
-          entry_time: string
-          exit_time: string
+          entry_time?: string | null
+          exit_time?: string | null
           id?: string
-          total_hours: string
+          lunch_exit_time?: string | null
+          lunch_return_time?: string | null
+          total_hours?: string | null
           updated_at?: string
           user_id: string
         }
@@ -41,10 +45,12 @@ export type Database = {
           created_at?: string
           date?: string
           employee_name?: string
-          entry_time?: string
-          exit_time?: string
+          entry_time?: string | null
+          exit_time?: string | null
           id?: string
-          total_hours?: string
+          lunch_exit_time?: string | null
+          lunch_return_time?: string | null
+          total_hours?: string | null
           updated_at?: string
           user_id?: string
         }
