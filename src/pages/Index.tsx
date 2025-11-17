@@ -24,9 +24,11 @@ interface TimeRecord {
   user_id: string;
   employee_name: string;
   date: string;
-  entry_time: string;
-  exit_time: string;
-  total_hours: string;
+  entry_time: string | null;
+  lunch_exit_time: string | null;
+  lunch_return_time: string | null;
+  exit_time: string | null;
+  total_hours: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -45,6 +47,8 @@ const Index = () => {
   const [editPassword, setEditPassword] = useState("");
   const [editFormData, setEditFormData] = useState({
     entry_time: "",
+    lunch_exit_time: "",
+    lunch_return_time: "",
     exit_time: "",
   });
   const [clearPassword, setClearPassword] = useState("");
@@ -127,7 +131,12 @@ const Index = () => {
     return h * 60 + m;
   };
 
-  const calculateTotalHours = (entryTime: string, exitTime: string): { total: string; overtime: boolean } => {
+  const calculateTotalHours = (
+    entryTime: string | null, 
+    lunchExitTime: string | null, 
+    lunchReturnTime: string | null, 
+    exitTime: string | null
+  ): { total: string; overtime: boolean } => {
     if (!entryTime || !exitTime) {
       return { total: "--:--", overtime: false };
     }
@@ -137,8 +146,16 @@ const Index = () => {
     
     let totalMinutes = saida - entrada;
     
-    // Subtract lunch break (1 hour = 60 minutes)
-    totalMinutes -= 60;
+    // Subtract actual lunch break time if both times are provided
+    if (lunchExitTime && lunchReturnTime) {
+      const lunchExit = timeToMinutes(lunchExitTime);
+      const lunchReturn = timeToMinutes(lunchReturnTime);
+      const lunchBreakMinutes = lunchReturn - lunchExit;
+      totalMinutes -= lunchBreakMinutes;
+    } else {
+      // Default: subtract 1 hour lunch break
+      totalMinutes -= 60;
+    }
 
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
@@ -161,7 +178,15 @@ const Index = () => {
       const saida = timeToMinutes(record.exit_time);
       let workedMinutes = saida - entrada;
       
-      workedMinutes -= 60; // lunch break
+      // Subtract actual lunch break time if both times are provided
+      if (record.lunch_exit_time && record.lunch_return_time) {
+        const lunchExit = timeToMinutes(record.lunch_exit_time);
+        const lunchReturn = timeToMinutes(record.lunch_return_time);
+        const lunchBreakMinutes = lunchReturn - lunchExit;
+        workedMinutes -= lunchBreakMinutes;
+      } else {
+        workedMinutes -= 60; // Default lunch break
+      }
       
       // 480 minutes = 8 hours (standard workday)
       totalBalanceMinutes += (workedMinutes - 480);
@@ -182,7 +207,7 @@ const Index = () => {
   const markEntry = async () => {
     if (!user) return;
     
-    const today = filterDate || new Date().toISOString().split("T")[0];
+    const today = new Date().toISOString().split("T")[0];
     const currentTime = getCurrentTime();
 
     try {
@@ -192,7 +217,7 @@ const Index = () => {
         .select("*")
         .eq("user_id", user.id)
         .eq("date", today)
-        .single();
+        .maybeSingle();
 
       if (existing) {
         toast.error("Já existe um registro de entrada para hoje");
@@ -206,8 +231,10 @@ const Index = () => {
           employee_name: employeeName,
           date: today,
           entry_time: currentTime,
-          exit_time: "",
-          total_hours: "--:--",
+          lunch_exit_time: null,
+          lunch_return_time: null,
+          exit_time: null,
+          total_hours: null,
         });
 
       if (error) throw error;
@@ -220,20 +247,102 @@ const Index = () => {
     }
   };
 
-  const markExit = async () => {
+  const markLunchExit = async () => {
     if (!user) return;
     
-    const today = filterDate || new Date().toISOString().split("T")[0];
+    const today = new Date().toISOString().split("T")[0];
     const currentTime = getCurrentTime();
 
     try {
-      // Find today's record
       const { data: existing } = await supabase
         .from("time_records")
         .select("*")
         .eq("user_id", user.id)
         .eq("date", today)
-        .single();
+        .maybeSingle();
+
+      if (!existing) {
+        toast.error("Você precisa registrar a entrada primeiro");
+        return;
+      }
+
+      if (existing.lunch_exit_time) {
+        toast.error("Saída para almoço já foi registrada");
+        return;
+      }
+
+      const { error } = await supabase
+        .from("time_records")
+        .update({ lunch_exit_time: currentTime })
+        .eq("id", existing.id);
+
+      if (error) throw error;
+
+      toast.success(`Saída para almoço registrada: ${currentTime}`);
+      await loadRecords();
+    } catch (error: any) {
+      console.error("Error marking lunch exit:", error);
+      toast.error("Erro ao registrar saída para almoço");
+    }
+  };
+
+  const markLunchReturn = async () => {
+    if (!user) return;
+    
+    const today = new Date().toISOString().split("T")[0];
+    const currentTime = getCurrentTime();
+
+    try {
+      const { data: existing } = await supabase
+        .from("time_records")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("date", today)
+        .maybeSingle();
+
+      if (!existing) {
+        toast.error("Você precisa registrar a entrada primeiro");
+        return;
+      }
+
+      if (!existing.lunch_exit_time) {
+        toast.error("Você precisa registrar a saída para almoço primeiro");
+        return;
+      }
+
+      if (existing.lunch_return_time) {
+        toast.error("Volta do almoço já foi registrada");
+        return;
+      }
+
+      const { error } = await supabase
+        .from("time_records")
+        .update({ lunch_return_time: currentTime })
+        .eq("id", existing.id);
+
+      if (error) throw error;
+
+      toast.success(`Volta do almoço registrada: ${currentTime}`);
+      await loadRecords();
+    } catch (error: any) {
+      console.error("Error marking lunch return:", error);
+      toast.error("Erro ao registrar volta do almoço");
+    }
+  };
+
+  const markExit = async () => {
+    if (!user) return;
+    
+    const today = new Date().toISOString().split("T")[0];
+    const currentTime = getCurrentTime();
+
+    try {
+      const { data: existing } = await supabase
+        .from("time_records")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("date", today)
+        .maybeSingle();
 
       if (!existing) {
         toast.error("Você precisa registrar a entrada primeiro");
@@ -245,7 +354,12 @@ const Index = () => {
         return;
       }
 
-      const { total, overtime } = calculateTotalHours(existing.entry_time, currentTime);
+      const { total, overtime } = calculateTotalHours(
+        existing.entry_time, 
+        existing.lunch_exit_time,
+        existing.lunch_return_time,
+        currentTime
+      );
 
       const { error } = await supabase
         .from("time_records")
@@ -275,6 +389,8 @@ const Index = () => {
       Data: new Date(r.date + "T00:00:00").toLocaleDateString("pt-BR"),
       Funcionário: r.employee_name,
       Entrada: r.entry_time || "--:--",
+      "Saída Almoço": r.lunch_exit_time || "--:--",
+      "Volta Almoço": r.lunch_return_time || "--:--",
       Saída: r.exit_time || "--:--",
       "Total Horas": r.total_hours || "--:--",
     }));
@@ -286,6 +402,8 @@ const Index = () => {
       Data: "",
       Funcionário: "",
       Entrada: "",
+      "Saída Almoço": "",
+      "Volta Almoço": "",
       Saída: "Saldo Total:",
       "Total Horas": balance.formatted,
     });
@@ -295,6 +413,8 @@ const Index = () => {
       Data: "",
       Funcionário: "",
       Entrada: "",
+      "Saída Almoço": "",
+      "Volta Almoço": "",
       Saída: "",
       "Total Horas": "",
     });
@@ -304,6 +424,8 @@ const Index = () => {
       Data: "Assinatura do funcionário: ________________________________",
       Funcionário: "",
       Entrada: "",
+      "Saída Almoço": "",
+      "Volta Almoço": "",
       Saída: "",
       "Total Horas": "",
     });
@@ -399,6 +521,8 @@ const Index = () => {
     setEditingRecord(record);
     setEditFormData({
       entry_time: record.entry_time || "",
+      lunch_exit_time: record.lunch_exit_time || "",
+      lunch_return_time: record.lunch_return_time || "",
       exit_time: record.exit_time || "",
     });
     setEditPassword("");
@@ -414,13 +538,20 @@ const Index = () => {
     if (!editingRecord) return;
 
     try {
-      const { total, overtime } = calculateTotalHours(editFormData.entry_time, editFormData.exit_time);
+      const { total, overtime } = calculateTotalHours(
+        editFormData.entry_time || null,
+        editFormData.lunch_exit_time || null,
+        editFormData.lunch_return_time || null,
+        editFormData.exit_time || null
+      );
 
       const { error } = await supabase
         .from("time_records")
         .update({
-          entry_time: editFormData.entry_time,
-          exit_time: editFormData.exit_time,
+          entry_time: editFormData.entry_time || null,
+          lunch_exit_time: editFormData.lunch_exit_time || null,
+          lunch_return_time: editFormData.lunch_return_time || null,
+          exit_time: editFormData.exit_time || null,
           total_hours: total,
         })
         .eq("id", editingRecord.id);
@@ -540,6 +671,18 @@ const Index = () => {
               Registrar Entrada
             </Button>
             <Button
+              onClick={markLunchExit}
+              className="bg-warning hover:bg-warning/90"
+            >
+              Saída Almoço
+            </Button>
+            <Button
+              onClick={markLunchReturn}
+              className="bg-info hover:bg-info/90"
+            >
+              Volta Almoço
+            </Button>
+            <Button
               onClick={markExit}
               className="bg-destructive hover:bg-destructive/90"
             >
@@ -600,6 +743,8 @@ const Index = () => {
                     <tr className="border-b border-border bg-muted">
                       <th className="text-left p-3 font-semibold">Data</th>
                       <th className="text-left p-3 font-semibold">Entrada</th>
+                      <th className="text-left p-3 font-semibold">Saída Almoço</th>
+                      <th className="text-left p-3 font-semibold">Volta Almoço</th>
                       <th className="text-left p-3 font-semibold">Saída</th>
                       <th className="text-left p-3 font-semibold">Total Horas</th>
                       <th className="text-left p-3 font-semibold">Ações</th>
@@ -607,13 +752,20 @@ const Index = () => {
                   </thead>
                   <tbody>
                     {filteredRecords.map((record) => {
-                      const { total, overtime } = calculateTotalHours(record.entry_time, record.exit_time);
+                      const { total, overtime } = calculateTotalHours(
+                        record.entry_time,
+                        record.lunch_exit_time,
+                        record.lunch_return_time,
+                        record.exit_time
+                      );
                       return (
                         <tr key={record.id} className="border-b border-border hover:bg-muted/50">
                           <td className="p-3">
                             {new Date(record.date + "T00:00:00").toLocaleDateString("pt-BR")}
                           </td>
                           <td className="p-3">{record.entry_time || "--:--"}</td>
+                          <td className="p-3">{record.lunch_exit_time || "--:--"}</td>
+                          <td className="p-3">{record.lunch_return_time || "--:--"}</td>
                           <td className="p-3">{record.exit_time || "--:--"}</td>
                           <td className="p-3">
                             <span
@@ -690,6 +842,28 @@ const Index = () => {
                   value={editFormData.entry_time}
                   onChange={(e) =>
                     setEditFormData({ ...editFormData, entry_time: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-lunch-exit">Saída Almoço</Label>
+                <Input
+                  id="edit-lunch-exit"
+                  type="time"
+                  value={editFormData.lunch_exit_time}
+                  onChange={(e) =>
+                    setEditFormData({ ...editFormData, lunch_exit_time: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-lunch-return">Volta Almoço</Label>
+                <Input
+                  id="edit-lunch-return"
+                  type="time"
+                  value={editFormData.lunch_return_time}
+                  onChange={(e) =>
+                    setEditFormData({ ...editFormData, lunch_return_time: e.target.value })
                   }
                 />
               </div>
