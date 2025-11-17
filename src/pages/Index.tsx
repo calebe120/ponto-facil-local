@@ -160,7 +160,7 @@ const Index = () => {
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
     
-    const overtime = totalMinutes > 480; // 8 hours = 480 minutes
+    const overtime = totalMinutes > 528; // 8h48min = 528 minutes (Brazilian standard: 44h per week / 5 days)
 
     return {
       total: `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`,
@@ -188,8 +188,8 @@ const Index = () => {
         workedMinutes -= 60; // Default lunch break
       }
       
-      // 480 minutes = 8 hours (standard workday)
-      totalBalanceMinutes += (workedMinutes - 480);
+      // 528 minutes = 8h48min (Brazilian standard: 44h per week / 5 days)
+      totalBalanceMinutes += (workedMinutes - 528);
     });
     
     const isPositive = totalBalanceMinutes >= 0;
@@ -804,21 +804,6 @@ const Index = () => {
                     })}
                   </tbody>
                 </table>
-              </div>
-              
-              {/* Monthly Balance Summary */}
-              <div className="mt-4 p-4 bg-muted/50 rounded-lg border border-border">
-                <div className="flex items-center justify-between">
-                  <span className="text-lg font-semibold">Saldo do Período:</span>
-                  <span className={`text-2xl font-bold ${
-                    calculateBalance(filteredRecords).isPositive 
-                      ? "text-success" 
-                      : "text-destructive"
-                  }`}>
-                    {calculateBalance(filteredRecords).formatted}
-                    {calculateBalance(filteredRecords).isPositive ? " (horas extras)" : " (horas faltantes)"}
-                  </span>
-                </div>
               </div>
             </>
           )}
