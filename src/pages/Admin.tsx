@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { LogOut, Pencil, Trash2, Calendar } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 import * as XLSX from "xlsx";
 
 interface TimeRecord {
@@ -26,7 +27,7 @@ interface TimeRecord {
 const Admin = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [isAdmin, setIsAdmin] = useState(false);
+  const { user, role, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [records, setRecords] = useState<TimeRecord[]>([]);
   const [selectedEmployee, setSelectedEmployee] = useState<string>("all");
@@ -43,31 +44,13 @@ const Admin = () => {
   });
 
   useEffect(() => {
-    checkAdminAccess();
-  }, []);
-
-  useEffect(() => {
-    if (isAdmin) {
-      fetchRecords();
-    }
-  }, [isAdmin]);
-
-  const checkAdminAccess = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
+    if (!authLoading) {
       if (!user) {
         navigate("/auth");
         return;
       }
 
-      const { data: roleData } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user.id)
-        .single();
-
-      if (roleData?.role !== "admin") {
+      if (role !== "admin") {
         toast({
           title: "Acesso Negado",
           description: "Você não tem permissão para acessar esta área.",
@@ -77,14 +60,16 @@ const Admin = () => {
         return;
       }
 
-      setIsAdmin(true);
-    } catch (error) {
-      console.error("Error checking admin access:", error);
-      navigate("/");
-    } finally {
+      fetchRecords();
       setLoading(false);
     }
-  };
+  }, [authLoading, user, role, navigate]);
+
+  useEffect(() => {
+    if (role === "admin") {
+      fetchRecords();
+    }
+  }, [role]);
 
   const fetchRecords = async () => {
     try {
@@ -224,7 +209,7 @@ const Admin = () => {
     ? records 
     : records.filter(r => r.employee_name === selectedEmployee);
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">Carregando...</div>

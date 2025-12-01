@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Clock, Users, Download, Trash2, Calendar, Edit, LogOut } from "lucide-react";
+import { Clock, Users, Download, Trash2, Calendar, Edit, LogOut, Shield } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 import * as XLSX from "xlsx";
 import {
   Dialog,
@@ -17,7 +18,6 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import logoCvc from "@/assets/logo-cvc.jpeg";
-import type { Session, User } from "@supabase/supabase-js";
 
 interface TimeRecord {
   id: string;
@@ -35,8 +35,7 @@ interface TimeRecord {
 
 const Index = () => {
   const navigate = useNavigate();
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+  const { user, session, role, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [records, setRecords] = useState<TimeRecord[]>([]);
   const [filterDate, setFilterDate] = useState(
@@ -63,10 +62,7 @@ const Index = () => {
 
   // Auth check
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      
+    if (!authLoading) {
       if (!session) {
         navigate("/auth");
       } else {
@@ -74,21 +70,8 @@ const Index = () => {
         setEmployeeName(session.user.user_metadata?.employee_name || session.user.email || "");
         setLoading(false);
       }
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      
-      if (!session) {
-        navigate("/auth");
-      } else {
-        setEmployeeName(session.user.user_metadata?.employee_name || session.user.email || "");
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, [navigate]);
+    }
+  }, [authLoading, session, navigate]);
 
   // Load records from database
   useEffect(() => {
@@ -647,10 +630,18 @@ const Index = () => {
             <div className="flex items-center justify-center gap-4 flex-1">
               <img src={logoCvc} alt="CVC Logo" className="w-24 h-24 object-contain" />
             </div>
-            <Button onClick={handleLogout} variant="outline" size="sm">
-              <LogOut className="w-4 h-4 mr-2" />
-              Sair
-            </Button>
+            <div className="flex gap-2">
+              {role === "admin" && (
+                <Button onClick={() => navigate("/admin")} variant="default" size="sm">
+                  <Shield className="w-4 h-4 mr-2" />
+                  Painel Admin
+                </Button>
+              )}
+              <Button onClick={handleLogout} variant="outline" size="sm">
+                <LogOut className="w-4 h-4 mr-2" />
+                Sair
+              </Button>
+            </div>
           </div>
           <h1 className="text-4xl font-bold text-foreground flex items-center justify-center gap-3">
             <Clock className="w-10 h-10 text-accent" />
