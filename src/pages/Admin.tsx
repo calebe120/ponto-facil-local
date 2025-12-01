@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, Pencil, Trash2, Calendar } from "lucide-react";
+import { LogOut, Pencil, Trash2, Calendar, Plus } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import * as XLSX from "xlsx";
 
@@ -36,6 +36,16 @@ const Admin = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<TimeRecord | null>(null);
   const [editFormData, setEditFormData] = useState({
+    date: "",
+    entry_time: "",
+    lunch_exit_time: "",
+    lunch_return_time: "",
+    exit_time: "",
+  });
+  const [manualEntryDialogOpen, setManualEntryDialogOpen] = useState(false);
+  const [manualEntryData, setManualEntryData] = useState({
+    employee_name: "",
+    user_id: "",
     date: "",
     entry_time: "",
     lunch_exit_time: "",
@@ -179,6 +189,112 @@ const Admin = () => {
     }
   };
 
+  const timeToMinutes = (time: string) => {
+    const [h, m] = time.split(":").map(Number);
+    return h * 60 + m;
+  };
+
+  const calculateTotalHours = (
+    entryTime: string | null,
+    lunchExitTime: string | null,
+    lunchReturnTime: string | null,
+    exitTime: string | null
+  ): string => {
+    if (!entryTime || !exitTime) {
+      return "--:--";
+    }
+
+    const entrada = timeToMinutes(entryTime);
+    const saida = timeToMinutes(exitTime);
+
+    let totalMinutes = saida - entrada;
+
+    if (lunchExitTime && lunchReturnTime) {
+      const lunchExit = timeToMinutes(lunchExitTime);
+      const lunchReturn = timeToMinutes(lunchReturnTime);
+      const lunchBreakMinutes = lunchReturn - lunchExit;
+      totalMinutes -= lunchBreakMinutes;
+    } else {
+      totalMinutes -= 60;
+    }
+
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+  };
+
+  const openManualEntryDialog = () => {
+    setManualEntryData({
+      employee_name: "",
+      user_id: "",
+      date: new Date().toISOString().split("T")[0],
+      entry_time: "",
+      lunch_exit_time: "",
+      lunch_return_time: "",
+      exit_time: "",
+    });
+    setManualEntryDialogOpen(true);
+  };
+
+  const saveManualEntry = async () => {
+    if (!manualEntryData.date || !manualEntryData.employee_name || !manualEntryData.user_id) {
+      toast({
+        title: "Erro",
+        description: "Preencha o nome do funcionário, user_id e a data",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!manualEntryData.entry_time && !manualEntryData.exit_time) {
+      toast({
+        title: "Erro",
+        description: "Preencha pelo menos a entrada ou saída",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const total = calculateTotalHours(
+        manualEntryData.entry_time || null,
+        manualEntryData.lunch_exit_time || null,
+        manualEntryData.lunch_return_time || null,
+        manualEntryData.exit_time || null
+      );
+
+      const { error } = await supabase
+        .from("time_records")
+        .insert({
+          user_id: manualEntryData.user_id,
+          employee_name: manualEntryData.employee_name,
+          date: manualEntryData.date,
+          entry_time: manualEntryData.entry_time || null,
+          lunch_exit_time: manualEntryData.lunch_exit_time || null,
+          lunch_return_time: manualEntryData.lunch_return_time || null,
+          exit_time: manualEntryData.exit_time || null,
+          total_hours: total,
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "Sucesso",
+        description: "Registro manual adicionado com sucesso!",
+      });
+      setManualEntryDialogOpen(false);
+      fetchRecords();
+    } catch (error: any) {
+      console.error("Error saving manual entry:", error);
+      toast({
+        title: "Erro",
+        description: "Erro ao salvar registro manual",
+        variant: "destructive",
+      });
+    }
+  };
+
   const exportToXLS = () => {
     const filteredData = selectedEmployee === "all" 
       ? records 
@@ -241,8 +357,8 @@ const Admin = () => {
             <CardTitle>Filtros e Exportação</CardTitle>
             <CardDescription>Filtre por funcionário e exporte os dados</CardDescription>
           </CardHeader>
-          <CardContent className="flex gap-4">
-            <div className="flex-1">
+          <CardContent className="flex flex-wrap gap-4">
+            <div className="flex-1 min-w-[200px]">
               <Label htmlFor="employee-filter">Funcionário</Label>
               <select
                 id="employee-filter"
@@ -256,8 +372,12 @@ const Admin = () => {
                 ))}
               </select>
             </div>
-            <div className="flex items-end">
-              <Button onClick={exportToXLS}>
+            <div className="flex items-end gap-2">
+              <Button onClick={openManualEntryDialog} variant="default">
+                <Plus className="mr-2 h-4 w-4" />
+                Adicionar Registro Manual
+              </Button>
+              <Button onClick={exportToXLS} variant="outline">
                 <Calendar className="mr-2 h-4 w-4" />
                 Exportar para Excel
               </Button>
@@ -414,6 +534,105 @@ const Admin = () => {
             <Button variant="destructive" onClick={handleDelete}>
               Excluir
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manual Entry Dialog */}
+      <Dialog open={manualEntryDialogOpen} onOpenChange={setManualEntryDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Adicionar Registro Manual</DialogTitle>
+            <DialogDescription>
+              Preencha os dados do funcionário e os horários. Você pode registrar qualquer dia, inclusive dias anteriores.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="manual-employee-name">Nome do Funcionário *</Label>
+              <Input
+                id="manual-employee-name"
+                type="text"
+                placeholder="Nome completo"
+                value={manualEntryData.employee_name}
+                onChange={(e) =>
+                  setManualEntryData({ ...manualEntryData, employee_name: e.target.value })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="manual-user-id">User ID *</Label>
+              <Input
+                id="manual-user-id"
+                type="text"
+                placeholder="ID do usuário no sistema"
+                value={manualEntryData.user_id}
+                onChange={(e) =>
+                  setManualEntryData({ ...manualEntryData, user_id: e.target.value })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="manual-date">Data *</Label>
+              <Input
+                id="manual-date"
+                type="date"
+                value={manualEntryData.date}
+                onChange={(e) =>
+                  setManualEntryData({ ...manualEntryData, date: e.target.value })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="manual-entry">Entrada</Label>
+              <Input
+                id="manual-entry"
+                type="time"
+                value={manualEntryData.entry_time}
+                onChange={(e) =>
+                  setManualEntryData({ ...manualEntryData, entry_time: e.target.value })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="manual-lunch-exit">Saída Almoço</Label>
+              <Input
+                id="manual-lunch-exit"
+                type="time"
+                value={manualEntryData.lunch_exit_time}
+                onChange={(e) =>
+                  setManualEntryData({ ...manualEntryData, lunch_exit_time: e.target.value })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="manual-lunch-return">Volta Almoço</Label>
+              <Input
+                id="manual-lunch-return"
+                type="time"
+                value={manualEntryData.lunch_return_time}
+                onChange={(e) =>
+                  setManualEntryData({ ...manualEntryData, lunch_return_time: e.target.value })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="manual-exit">Saída</Label>
+              <Input
+                id="manual-exit"
+                type="time"
+                value={manualEntryData.exit_time}
+                onChange={(e) =>
+                  setManualEntryData({ ...manualEntryData, exit_time: e.target.value })
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setManualEntryDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={saveManualEntry}>Salvar Registro</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
