@@ -225,10 +225,15 @@ const Admin = () => {
             <h1 className="text-3xl font-bold">Dashboard Administrativo</h1>
             <p className="text-muted-foreground">Gerenciamento de registros de ponto</p>
           </div>
-          <Button variant="outline" onClick={handleLogout}>
-            <LogOut className="mr-2 h-4 w-4" />
-            Sair
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => navigate("/")}>
+              Voltar
+            </Button>
+            <Button variant="outline" onClick={handleLogout}>
+              <LogOut className="mr-2 h-4 w-4" />
+              Sair
+            </Button>
+          </div>
         </div>
 
         <Card className="mb-6">
