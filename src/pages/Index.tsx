@@ -59,14 +59,6 @@ const Index = () => {
   const [deletePassword, setDeletePassword] = useState("");
   const [recordToDelete, setRecordToDelete] = useState<TimeRecord | null>(null);
   const [employeeName, setEmployeeName] = useState("");
-  const [manualEntryDialogOpen, setManualEntryDialogOpen] = useState(false);
-  const [manualEntryData, setManualEntryData] = useState({
-    date: "",
-    entry_time: "",
-    lunch_exit_time: "",
-    lunch_return_time: "",
-    exit_time: "",
-  });
 
   // Auth check
   useEffect(() => {
@@ -593,60 +585,6 @@ const Index = () => {
     }
   };
 
-  const openManualEntryDialog = () => {
-    setManualEntryData({
-      date: new Date().toISOString().split("T")[0],
-      entry_time: "",
-      lunch_exit_time: "",
-      lunch_return_time: "",
-      exit_time: "",
-    });
-    setManualEntryDialogOpen(true);
-  };
-
-  const saveManualEntry = async () => {
-    if (!user || !manualEntryData.date) {
-      toast.error("Data é obrigatória");
-      return;
-    }
-
-    if (!manualEntryData.entry_time && !manualEntryData.exit_time) {
-      toast.error("Preencha pelo menos a entrada ou saída");
-      return;
-    }
-
-    try {
-      const { total } = calculateTotalHours(
-        manualEntryData.entry_time || null,
-        manualEntryData.lunch_exit_time || null,
-        manualEntryData.lunch_return_time || null,
-        manualEntryData.exit_time || null
-      );
-
-      const { error } = await supabase
-        .from("time_records")
-        .insert({
-          user_id: user.id,
-          employee_name: employeeName,
-          date: manualEntryData.date,
-          entry_time: manualEntryData.entry_time || null,
-          lunch_exit_time: manualEntryData.lunch_exit_time || null,
-          lunch_return_time: manualEntryData.lunch_return_time || null,
-          exit_time: manualEntryData.exit_time || null,
-          total_hours: total,
-        });
-
-      if (error) throw error;
-
-      toast.success("Registro manual adicionado com sucesso!");
-      setManualEntryDialogOpen(false);
-      await loadRecords();
-    } catch (error: any) {
-      console.error("Error saving manual entry:", error);
-      toast.error("Erro ao salvar registro manual");
-    }
-  };
-
   // Filter records by month instead of specific date
   const getMonthRecords = () => {
     if (!filterDate) return records;
@@ -716,7 +654,7 @@ const Index = () => {
         {/* Time Marking */}
         <Card className="p-6 shadow-lg">
           <h2 className="text-2xl font-semibold mb-4">Marcação de Ponto</h2>
-          <div className="flex flex-wrap gap-3 justify-center mb-4">
+          <div className="flex flex-wrap gap-3 justify-center">
             <Button
               onClick={markEntry}
               className="bg-success hover:bg-success/90"
@@ -740,16 +678,6 @@ const Index = () => {
               className="bg-destructive hover:bg-destructive/90"
             >
               Registrar Saída
-            </Button>
-          </div>
-          <div className="border-t pt-4 mt-4">
-            <Button
-              onClick={openManualEntryDialog}
-              variant="outline"
-              className="w-full"
-            >
-              <Calendar className="w-4 h-4 mr-2" />
-              Adicionar Registro Manual (Qualquer Data)
             </Button>
           </div>
         </Card>
@@ -1023,83 +951,6 @@ const Index = () => {
               <Button onClick={deleteRecord} variant="destructive">
                 <Trash2 className="w-4 h-4 mr-2" />
                 Apagar
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Manual Entry Dialog */}
-        <Dialog open={manualEntryDialogOpen} onOpenChange={setManualEntryDialogOpen}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Adicionar Registro Manual</DialogTitle>
-              <DialogDescription>
-                Preencha a data e os horários que deseja registrar. Você pode registrar qualquer dia, inclusive dias anteriores.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="manual-date">Data *</Label>
-                <Input
-                  id="manual-date"
-                  type="date"
-                  value={manualEntryData.date}
-                  onChange={(e) =>
-                    setManualEntryData({ ...manualEntryData, date: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="manual-entry">Entrada</Label>
-                <Input
-                  id="manual-entry"
-                  type="time"
-                  value={manualEntryData.entry_time}
-                  onChange={(e) =>
-                    setManualEntryData({ ...manualEntryData, entry_time: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="manual-lunch-exit">Saída Almoço</Label>
-                <Input
-                  id="manual-lunch-exit"
-                  type="time"
-                  value={manualEntryData.lunch_exit_time}
-                  onChange={(e) =>
-                    setManualEntryData({ ...manualEntryData, lunch_exit_time: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="manual-lunch-return">Volta Almoço</Label>
-                <Input
-                  id="manual-lunch-return"
-                  type="time"
-                  value={manualEntryData.lunch_return_time}
-                  onChange={(e) =>
-                    setManualEntryData({ ...manualEntryData, lunch_return_time: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="manual-exit">Saída</Label>
-                <Input
-                  id="manual-exit"
-                  type="time"
-                  value={manualEntryData.exit_time}
-                  onChange={(e) =>
-                    setManualEntryData({ ...manualEntryData, exit_time: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setManualEntryDialogOpen(false)}>
-                Cancelar
-              </Button>
-              <Button onClick={saveManualEntry} className="bg-success hover:bg-success/90">
-                Salvar Registro
               </Button>
             </DialogFooter>
           </DialogContent>
