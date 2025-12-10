@@ -126,6 +126,13 @@ const Admin = () => {
     if (!selectedRecord) return;
 
     try {
+      const total = calculateTotalHoursValue(
+        editFormData.entry_time || null,
+        editFormData.lunch_exit_time || null,
+        editFormData.lunch_return_time || null,
+        editFormData.exit_time || null
+      );
+
       const { error } = await supabase
         .from("time_records")
         .update({
@@ -134,6 +141,7 @@ const Admin = () => {
           lunch_exit_time: editFormData.lunch_exit_time || null,
           lunch_return_time: editFormData.lunch_return_time || null,
           exit_time: editFormData.exit_time || null,
+          total_hours: total,
         })
         .eq("id", selectedRecord.id);
 
@@ -190,11 +198,14 @@ const Admin = () => {
   };
 
   const timeToMinutes = (time: string) => {
-    const [h, m] = time.split(":").map(Number);
+    // Handle time with seconds (HH:MM:SS) or without (HH:MM)
+    const parts = time.split(":");
+    const h = Number(parts[0]);
+    const m = Number(parts[1]);
     return h * 60 + m;
   };
 
-  const calculateTotalHours = (
+  const calculateTotalHoursValue = (
     entryTime: string | null,
     lunchExitTime: string | null,
     lunchReturnTime: string | null,
@@ -257,7 +268,7 @@ const Admin = () => {
     }
 
     try {
-      const total = calculateTotalHours(
+      const total = calculateTotalHoursValue(
         manualEntryData.entry_time || null,
         manualEntryData.lunch_exit_time || null,
         manualEntryData.lunch_return_time || null,
@@ -408,7 +419,14 @@ const Admin = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredRecords.map((record) => (
+                  {filteredRecords.map((record) => {
+                    const calculatedTotal = calculateTotalHoursValue(
+                      record.entry_time,
+                      record.lunch_exit_time,
+                      record.lunch_return_time,
+                      record.exit_time
+                    );
+                    return (
                     <TableRow key={record.id}>
                       <TableCell className="font-medium">{record.employee_name}</TableCell>
                       <TableCell>{new Date(record.date).toLocaleDateString("pt-BR")}</TableCell>
@@ -416,7 +434,7 @@ const Admin = () => {
                       <TableCell>{record.lunch_exit_time || "-"}</TableCell>
                       <TableCell>{record.lunch_return_time || "-"}</TableCell>
                       <TableCell>{record.exit_time || "-"}</TableCell>
-                      <TableCell>{record.total_hours || "-"}</TableCell>
+                      <TableCell>{calculatedTotal}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           <Button
@@ -436,7 +454,8 @@ const Admin = () => {
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                   {filteredRecords.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={8} className="text-center text-muted-foreground">
