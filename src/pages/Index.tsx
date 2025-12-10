@@ -129,16 +129,14 @@ const Index = () => {
     
     let totalMinutes = saida - entrada;
     
-    // Subtract actual lunch break time if both times are provided
+    // Subtract lunch break only if both lunch times are provided
     if (lunchExitTime && lunchReturnTime) {
       const lunchExit = timeToMinutes(lunchExitTime);
       const lunchReturn = timeToMinutes(lunchReturnTime);
       const lunchBreakMinutes = lunchReturn - lunchExit;
       totalMinutes -= lunchBreakMinutes;
-    } else {
-      // Default: subtract 1 hour lunch break
-      totalMinutes -= 60;
     }
+    // If no lunch times, just use (Exit - Entry) without any subtraction
 
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
@@ -161,15 +159,14 @@ const Index = () => {
       const saida = timeToMinutes(record.exit_time);
       let workedMinutes = saida - entrada;
       
-      // Subtract actual lunch break time if both times are provided
+      // Subtract lunch break only if both lunch times are provided
       if (record.lunch_exit_time && record.lunch_return_time) {
         const lunchExit = timeToMinutes(record.lunch_exit_time);
         const lunchReturn = timeToMinutes(record.lunch_return_time);
         const lunchBreakMinutes = lunchReturn - lunchExit;
         workedMinutes -= lunchBreakMinutes;
-      } else {
-        workedMinutes -= 60; // Default lunch break
       }
+      // If no lunch times, just use (Exit - Entry) without any subtraction
       
       // 528 minutes = 8h48min (Brazilian standard: 44h per week / 5 days)
       totalBalanceMinutes += (workedMinutes - 528);

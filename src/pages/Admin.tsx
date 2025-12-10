@@ -209,14 +209,14 @@ const Admin = () => {
 
     let totalMinutes = saida - entrada;
 
+    // Subtract lunch break only if both lunch times are provided
     if (lunchExitTime && lunchReturnTime) {
       const lunchExit = timeToMinutes(lunchExitTime);
       const lunchReturn = timeToMinutes(lunchReturnTime);
       const lunchBreakMinutes = lunchReturn - lunchExit;
       totalMinutes -= lunchBreakMinutes;
-    } else {
-      totalMinutes -= 60;
     }
+    // If no lunch times, just use (Exit - Entry) without any subtraction
 
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
