@@ -310,7 +310,7 @@ const Admin = () => {
         description: "Registro manual adicionado com sucesso!",
       });
       setManualEntryDialogOpen(false);
-      fetchRecords();
+      await fetchRecords();
     } catch (error: any) {
       console.error("Error saving manual entry:", error);
       toast({
