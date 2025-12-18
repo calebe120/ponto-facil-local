@@ -31,7 +31,7 @@ const Admin = () => {
   const [loading, setLoading] = useState(true);
   const [records, setRecords] = useState<TimeRecord[]>([]);
   const [selectedEmployee, setSelectedEmployee] = useState<string>("all");
-  const [employees, setEmployees] = useState<string[]>([]);
+  const [employees, setEmployees] = useState<{name: string; user_id: string}[]>([]);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<TimeRecord | null>(null);
@@ -44,8 +44,7 @@ const Admin = () => {
   });
   const [manualEntryDialogOpen, setManualEntryDialogOpen] = useState(false);
   const [manualEntryData, setManualEntryData] = useState({
-    employee_name: "",
-    user_id: "",
+    selected_employee: "",
     date: "",
     entry_time: "",
     lunch_exit_time: "",
@@ -93,7 +92,14 @@ const Admin = () => {
 
       setRecords(data || []);
       
-      const uniqueEmployees = Array.from(new Set(data?.map(r => r.employee_name) || []));
+      // Get unique employees with their user_ids
+      const employeeMap = new Map<string, string>();
+      data?.forEach(r => {
+        if (!employeeMap.has(r.employee_name)) {
+          employeeMap.set(r.employee_name, r.user_id);
+        }
+      });
+      const uniqueEmployees = Array.from(employeeMap.entries()).map(([name, user_id]) => ({ name, user_id }));
       setEmployees(uniqueEmployees);
     } catch (error) {
       console.error("Error fetching records:", error);
@@ -237,8 +243,7 @@ const Admin = () => {
 
   const openManualEntryDialog = () => {
     setManualEntryData({
-      employee_name: "",
-      user_id: "",
+      selected_employee: "",
       date: new Date().toISOString().split("T")[0],
       entry_time: "",
       lunch_exit_time: "",
@@ -249,10 +254,20 @@ const Admin = () => {
   };
 
   const saveManualEntry = async () => {
-    if (!manualEntryData.date || !manualEntryData.employee_name || !manualEntryData.user_id) {
+    if (!manualEntryData.date || !manualEntryData.selected_employee) {
       toast({
         title: "Erro",
-        description: "Preencha o nome do funcionário, user_id e a data",
+        description: "Selecione o funcionário e a data",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const selectedEmp = employees.find(e => e.name === manualEntryData.selected_employee);
+    if (!selectedEmp) {
+      toast({
+        title: "Erro",
+        description: "Funcionário não encontrado",
         variant: "destructive",
       });
       return;
@@ -278,8 +293,8 @@ const Admin = () => {
       const { error } = await supabase
         .from("time_records")
         .insert({
-          user_id: manualEntryData.user_id,
-          employee_name: manualEntryData.employee_name,
+          user_id: selectedEmp.user_id,
+          employee_name: selectedEmp.name,
           date: manualEntryData.date,
           entry_time: manualEntryData.entry_time || null,
           lunch_exit_time: manualEntryData.lunch_exit_time || null,
@@ -379,7 +394,7 @@ const Admin = () => {
               >
                 <option value="all">Todos os Funcionários</option>
                 {employees.map(emp => (
-                  <option key={emp} value={emp}>{emp}</option>
+                  <option key={emp.name} value={emp.name}>{emp.name}</option>
                 ))}
               </select>
             </div>
@@ -568,28 +583,20 @@ const Admin = () => {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="manual-employee-name">Nome do Funcionário *</Label>
-              <Input
-                id="manual-employee-name"
-                type="text"
-                placeholder="Nome completo"
-                value={manualEntryData.employee_name}
+              <Label htmlFor="manual-employee-select">Funcionário *</Label>
+              <select
+                id="manual-employee-select"
+                className="w-full rounded-md border border-input bg-background px-3 py-2"
+                value={manualEntryData.selected_employee}
                 onChange={(e) =>
-                  setManualEntryData({ ...manualEntryData, employee_name: e.target.value })
+                  setManualEntryData({ ...manualEntryData, selected_employee: e.target.value })
                 }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="manual-user-id">User ID *</Label>
-              <Input
-                id="manual-user-id"
-                type="text"
-                placeholder="ID do usuário no sistema"
-                value={manualEntryData.user_id}
-                onChange={(e) =>
-                  setManualEntryData({ ...manualEntryData, user_id: e.target.value })
-                }
-              />
+              >
+                <option value="">Selecione um funcionário</option>
+                {employees.map(emp => (
+                  <option key={emp.user_id} value={emp.name}>{emp.name}</option>
+                ))}
+              </select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="manual-date">Data *</Label>
