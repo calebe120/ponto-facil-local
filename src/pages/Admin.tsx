@@ -211,6 +211,12 @@ const Admin = () => {
     return h * 60 + m;
   };
 
+  // Format date without timezone conversion (YYYY-MM-DD to DD/MM/YYYY)
+  const formatDateBR = (dateStr: string) => {
+    const [year, month, day] = dateStr.split("-");
+    return `${day}/${month}/${year}`;
+  };
+
   const calculateTotalHoursValue = (
     entryTime: string | null,
     lunchExitTime: string | null,
@@ -328,7 +334,7 @@ const Admin = () => {
 
     const dataToExport = filteredData.map(record => ({
       "Funcionário": record.employee_name,
-      "Data": new Date(record.date).toLocaleDateString("pt-BR"),
+      "Data": formatDateBR(record.date),
       "Entrada": record.entry_time || "-",
       "Saída Almoço": record.lunch_exit_time || "-",
       "Volta Almoço": record.lunch_return_time || "-",
@@ -444,7 +450,7 @@ const Admin = () => {
                     return (
                     <TableRow key={record.id}>
                       <TableCell className="font-medium">{record.employee_name}</TableCell>
-                      <TableCell>{new Date(record.date).toLocaleDateString("pt-BR")}</TableCell>
+                      <TableCell>{formatDateBR(record.date)}</TableCell>
                       <TableCell>{record.entry_time || "-"}</TableCell>
                       <TableCell>{record.lunch_exit_time || "-"}</TableCell>
                       <TableCell>{record.lunch_return_time || "-"}</TableCell>
@@ -557,7 +563,7 @@ const Admin = () => {
             <DialogTitle>Confirmar Exclusão</DialogTitle>
             <DialogDescription>
               Tem certeza que deseja excluir o registro de {selectedRecord?.employee_name} do dia{" "}
-              {selectedRecord && new Date(selectedRecord.date).toLocaleDateString("pt-BR")}?
+              {selectedRecord && formatDateBR(selectedRecord.date)}?
               Esta ação não pode ser desfeita.
             </DialogDescription>
           </DialogHeader>
