@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { LogOut, Pencil, Trash2, Calendar, Plus } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import * as XLSX from "xlsx";
-import { getSaoPauloTodayYMD } from "@/lib/brazil-datetime";
+import { getSaoPauloTodayYMD, getMonthLabelPtBrFromYMD } from "@/lib/brazil-datetime";
 
 interface TimeRecord {
   id: string;
@@ -358,6 +358,41 @@ const Admin = () => {
     ? records 
     : records.filter(r => r.employee_name === selectedEmployee);
 
+  // Group records by month/year and sort chronologically
+  const groupedRecords = (() => {
+    const groups: { [key: string]: TimeRecord[] } = {};
+    
+    filteredRecords.forEach((record) => {
+      const [year, month] = record.date.split("-");
+      const key = `${year}-${month}`;
+      if (!groups[key]) {
+        groups[key] = [];
+      }
+      groups[key].push(record);
+    });
+
+    // Sort records within each group by date (ascending) and entry_time
+    Object.keys(groups).forEach((key) => {
+      groups[key].sort((a, b) => {
+        const dateCompare = a.date.localeCompare(b.date);
+        if (dateCompare !== 0) return dateCompare;
+        // If same date, sort by entry_time
+        const timeA = a.entry_time || "00:00";
+        const timeB = b.entry_time || "00:00";
+        return timeA.localeCompare(timeB);
+      });
+    });
+
+    // Sort groups by year-month descending (most recent first)
+    const sortedKeys = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+    
+    return sortedKeys.map((key) => ({
+      key,
+      label: getMonthLabelPtBrFromYMD(`${key}-01`),
+      records: groups[key],
+    }));
+  })();
+
   if (loading || authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -426,67 +461,73 @@ const Admin = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Funcionário</TableHead>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Entrada</TableHead>
-                    <TableHead>Saída Almoço</TableHead>
-                    <TableHead>Volta Almoço</TableHead>
-                    <TableHead>Saída Final</TableHead>
-                    <TableHead>Total Horas</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredRecords.map((record) => {
-                    const calculatedTotal = calculateTotalHoursValue(
-                      record.entry_time,
-                      record.lunch_exit_time,
-                      record.lunch_return_time,
-                      record.exit_time
-                    );
-                    return (
-                    <TableRow key={record.id}>
-                      <TableCell className="font-medium">{record.employee_name}</TableCell>
-                      <TableCell>{formatDateBR(record.date)}</TableCell>
-                      <TableCell>{record.entry_time || "-"}</TableCell>
-                      <TableCell>{record.lunch_exit_time || "-"}</TableCell>
-                      <TableCell>{record.lunch_return_time || "-"}</TableCell>
-                      <TableCell>{record.exit_time || "-"}</TableCell>
-                      <TableCell>{calculatedTotal}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => openEditDialog(record)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => openDeleteDialog(record)}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                    );
-                  })}
-                  {filteredRecords.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={8} className="text-center text-muted-foreground">
-                        Nenhum registro encontrado
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+            <div className="overflow-x-auto space-y-6">
+              {groupedRecords.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">
+                  Nenhum registro encontrado
+                </p>
+              ) : (
+                groupedRecords.map((group) => (
+                  <div key={group.key} className="space-y-2">
+                    <h3 className="text-lg font-semibold capitalize text-primary border-b pb-2">
+                      {group.label}
+                    </h3>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Funcionário</TableHead>
+                          <TableHead>Data</TableHead>
+                          <TableHead>Entrada</TableHead>
+                          <TableHead>Saída Almoço</TableHead>
+                          <TableHead>Volta Almoço</TableHead>
+                          <TableHead>Saída Final</TableHead>
+                          <TableHead>Total Horas</TableHead>
+                          <TableHead className="text-right">Ações</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {group.records.map((record) => {
+                          const calculatedTotal = calculateTotalHoursValue(
+                            record.entry_time,
+                            record.lunch_exit_time,
+                            record.lunch_return_time,
+                            record.exit_time
+                          );
+                          return (
+                            <TableRow key={record.id}>
+                              <TableCell className="font-medium">{record.employee_name}</TableCell>
+                              <TableCell>{formatDateBR(record.date)}</TableCell>
+                              <TableCell>{record.entry_time || "-"}</TableCell>
+                              <TableCell>{record.lunch_exit_time || "-"}</TableCell>
+                              <TableCell>{record.lunch_return_time || "-"}</TableCell>
+                              <TableCell>{record.exit_time || "-"}</TableCell>
+                              <TableCell>{calculatedTotal}</TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex justify-end gap-2">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => openEditDialog(record)}
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => openDeleteDialog(record)}
+                                  >
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ))
+              )}
             </div>
           </CardContent>
         </Card>
