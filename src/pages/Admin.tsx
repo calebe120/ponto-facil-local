@@ -52,6 +52,8 @@ const Admin = () => {
     lunch_return_time: "",
     exit_time: "",
   });
+  const [exportStartDate, setExportStartDate] = useState("");
+  const [exportEndDate, setExportEndDate] = useState("");
 
   useEffect(() => {
     if (!authLoading) {
@@ -328,37 +330,102 @@ const Admin = () => {
     }
   };
 
-  const exportToXLS = () => {
-    const filteredData = selectedEmployee === "all" 
-      ? records 
-      : records.filter(r => r.employee_name === selectedEmployee);
+  // Filter by employee and date range
+  const getFilteredByDateRange = (data: TimeRecord[]) => {
+    let filtered = selectedEmployee === "all" 
+      ? data 
+      : data.filter(r => r.employee_name === selectedEmployee);
 
-    const dataToExport = filteredData.map(record => ({
-      "Funcionário": record.employee_name,
-      "Data": formatDateBR(record.date),
-      "Entrada": record.entry_time || "-",
-      "Saída Almoço": record.lunch_exit_time || "-",
-      "Volta Almoço": record.lunch_return_time || "-",
-      "Saída Final": record.exit_time || "-",
-      "Total de Horas": record.total_hours || "-",
-    }));
+    if (exportStartDate) {
+      filtered = filtered.filter(r => r.date >= exportStartDate);
+    }
+    if (exportEndDate) {
+      filtered = filtered.filter(r => r.date <= exportEndDate);
+    }
+
+    return filtered;
+  };
+
+  // Sort records chronologically (ascending by date, then by entry_time)
+  const sortRecordsChronologically = (data: TimeRecord[]) => {
+    return [...data].sort((a, b) => {
+      const dateCompare = a.date.localeCompare(b.date);
+      if (dateCompare !== 0) return dateCompare;
+      const timeA = a.entry_time || "00:00";
+      const timeB = b.entry_time || "00:00";
+      return timeA.localeCompare(timeB);
+    });
+  };
+
+  const exportToXLS = () => {
+    const filteredData = getFilteredByDateRange(records);
+    const sortedData = sortRecordsChronologically(filteredData);
+
+    // Group by month for export (ascending order)
+    const groups: { [key: string]: TimeRecord[] } = {};
+    sortedData.forEach((record) => {
+      const [year, month] = record.date.split("-");
+      const key = `${year}-${month}`;
+      if (!groups[key]) {
+        groups[key] = [];
+      }
+      groups[key].push(record);
+    });
+
+    // Sort group keys ascending (oldest first)
+    const sortedKeys = Object.keys(groups).sort((a, b) => a.localeCompare(b));
+
+    // Build export data with month headers
+    const dataToExport: any[] = [];
+    sortedKeys.forEach((key) => {
+      const monthLabel = getMonthLabelPtBrFromYMD(`${key}-01`);
+      // Add month header row
+      dataToExport.push({
+        "Funcionário": monthLabel.toUpperCase(),
+        "Data": "",
+        "Entrada": "",
+        "Saída Almoço": "",
+        "Volta Almoço": "",
+        "Saída Final": "",
+        "Total de Horas": "",
+      });
+      // Add records for this month
+      groups[key].forEach(record => {
+        dataToExport.push({
+          "Funcionário": record.employee_name,
+          "Data": formatDateBR(record.date),
+          "Entrada": record.entry_time || "-",
+          "Saída Almoço": record.lunch_exit_time || "-",
+          "Volta Almoço": record.lunch_return_time || "-",
+          "Saída Final": record.exit_time || "-",
+          "Total de Horas": record.total_hours || "-",
+        });
+      });
+    });
 
     const ws = XLSX.utils.json_to_sheet(dataToExport);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Registros");
     
-    const fileName = selectedEmployee === "all" 
-      ? "registros_todos.xlsx" 
-      : `registros_${selectedEmployee.replace(/\s+/g, "_")}.xlsx`;
+    let fileName = "registros";
+    if (selectedEmployee !== "all") {
+      fileName += `_${selectedEmployee.replace(/\s+/g, "_")}`;
+    }
+    if (exportStartDate && exportEndDate) {
+      fileName += `_${exportStartDate}_a_${exportEndDate}`;
+    } else if (exportStartDate) {
+      fileName += `_desde_${exportStartDate}`;
+    } else if (exportEndDate) {
+      fileName += `_ate_${exportEndDate}`;
+    }
+    fileName += ".xlsx";
     
     XLSX.writeFile(wb, fileName);
   };
 
-  const filteredRecords = selectedEmployee === "all" 
-    ? records 
-    : records.filter(r => r.employee_name === selectedEmployee);
+  const filteredRecords = getFilteredByDateRange(records);
 
-  // Group records by month/year and sort chronologically
+  // Group records by month/year and sort chronologically (ascending)
   const groupedRecords = (() => {
     const groups: { [key: string]: TimeRecord[] } = {};
     
@@ -376,15 +443,14 @@ const Admin = () => {
       groups[key].sort((a, b) => {
         const dateCompare = a.date.localeCompare(b.date);
         if (dateCompare !== 0) return dateCompare;
-        // If same date, sort by entry_time
         const timeA = a.entry_time || "00:00";
         const timeB = b.entry_time || "00:00";
         return timeA.localeCompare(timeB);
       });
     });
 
-    // Sort groups by year-month descending (most recent first)
-    const sortedKeys = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+    // Sort groups by year-month ascending (oldest first)
+    const sortedKeys = Object.keys(groups).sort((a, b) => a.localeCompare(b));
     
     return sortedKeys.map((key) => ({
       key,
@@ -425,22 +491,44 @@ const Admin = () => {
             <CardTitle>Filtros e Exportação</CardTitle>
             <CardDescription>Filtre por funcionário e exporte os dados</CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-wrap gap-4">
-            <div className="flex-1 min-w-[200px]">
-              <Label htmlFor="employee-filter">Funcionário</Label>
-              <select
-                id="employee-filter"
-                className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2"
-                value={selectedEmployee}
-                onChange={(e) => setSelectedEmployee(e.target.value)}
-              >
-                <option value="all">Todos os Funcionários</option>
-                {employees.map(emp => (
-                  <option key={emp.name} value={emp.name}>{emp.name}</option>
-                ))}
-              </select>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap gap-4">
+              <div className="flex-1 min-w-[200px]">
+                <Label htmlFor="employee-filter">Funcionário</Label>
+                <select
+                  id="employee-filter"
+                  className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2"
+                  value={selectedEmployee}
+                  onChange={(e) => setSelectedEmployee(e.target.value)}
+                >
+                  <option value="all">Todos os Funcionários</option>
+                  {employees.map(emp => (
+                    <option key={emp.name} value={emp.name}>{emp.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="min-w-[160px]">
+                <Label htmlFor="export-start-date">Data Inicial</Label>
+                <Input
+                  id="export-start-date"
+                  type="date"
+                  className="mt-1"
+                  value={exportStartDate}
+                  onChange={(e) => setExportStartDate(e.target.value)}
+                />
+              </div>
+              <div className="min-w-[160px]">
+                <Label htmlFor="export-end-date">Data Final</Label>
+                <Input
+                  id="export-end-date"
+                  type="date"
+                  className="mt-1"
+                  value={exportEndDate}
+                  onChange={(e) => setExportEndDate(e.target.value)}
+                />
+              </div>
             </div>
-            <div className="flex items-end gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button onClick={openManualEntryDialog} variant="default">
                 <Plus className="mr-2 h-4 w-4" />
                 Adicionar Registro Manual
@@ -449,6 +537,17 @@ const Admin = () => {
                 <Calendar className="mr-2 h-4 w-4" />
                 Exportar para Excel
               </Button>
+              {(exportStartDate || exportEndDate) && (
+                <Button 
+                  variant="ghost" 
+                  onClick={() => {
+                    setExportStartDate("");
+                    setExportEndDate("");
+                  }}
+                >
+                  Limpar Período
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
