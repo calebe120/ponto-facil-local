@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { LogOut, Pencil, Trash2, Calendar, Plus } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import * as XLSX from "xlsx";
+import { getSaoPauloTodayYMD } from "@/lib/brazil-datetime";
 
 interface TimeRecord {
   id: string;
@@ -250,7 +251,7 @@ const Admin = () => {
   const openManualEntryDialog = () => {
     setManualEntryData({
       selected_employee: "",
-      date: new Date().toISOString().split("T")[0],
+      date: getSaoPauloTodayYMD(),
       entry_time: "",
       lunch_exit_time: "",
       lunch_return_time: "",

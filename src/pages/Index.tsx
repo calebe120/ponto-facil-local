@@ -18,6 +18,14 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import logoCvc from "@/assets/logo-cvc.jpeg";
+import {
+  formatDateBRFromYMD,
+  getMonthLabelPtBrFromYMD,
+  getMonthRangeFromYMD,
+  getSaoPauloNowFullDatePtBr,
+  getSaoPauloNowTimeHM,
+  getSaoPauloTodayYMD,
+} from "@/lib/brazil-datetime";
 
 interface TimeRecord {
   id: string;
@@ -38,9 +46,7 @@ const Index = () => {
   const { user, session, role, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [records, setRecords] = useState<TimeRecord[]>([]);
-  const [filterDate, setFilterDate] = useState(
-    new Date().toISOString().split("T")[0]
-  );
+  const [filterDate, setFilterDate] = useState(getSaoPauloTodayYMD());
   const [editingRecord, setEditingRecord] = useState<TimeRecord | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editPassword, setEditPassword] = useState("");
@@ -104,10 +110,7 @@ const Index = () => {
     navigate("/auth");
   };
 
-  const getCurrentTime = () => {
-    const now = new Date();
-    return now.toTimeString().slice(0, 5);
-  };
+  const getCurrentTime = () => getSaoPauloNowTimeHM();
 
   const timeToMinutes = (time: string) => {
     const [h, m] = time.split(":").map(Number);
@@ -187,7 +190,7 @@ const Index = () => {
   const markEntry = async () => {
     if (!user) return;
     
-    const today = new Date().toISOString().split("T")[0];
+    const today = getSaoPauloTodayYMD();
     const currentTime = getCurrentTime();
 
     try {
@@ -230,7 +233,7 @@ const Index = () => {
   const markLunchExit = async () => {
     if (!user) return;
     
-    const today = new Date().toISOString().split("T")[0];
+    const today = getSaoPauloTodayYMD();
     const currentTime = getCurrentTime();
 
     try {
@@ -269,7 +272,7 @@ const Index = () => {
   const markLunchReturn = async () => {
     if (!user) return;
     
-    const today = new Date().toISOString().split("T")[0];
+    const today = getSaoPauloTodayYMD();
     const currentTime = getCurrentTime();
 
     try {
@@ -313,7 +316,7 @@ const Index = () => {
   const markExit = async () => {
     if (!user) return;
     
-    const today = new Date().toISOString().split("T")[0];
+    const today = getSaoPauloTodayYMD();
     const currentTime = getCurrentTime();
 
     try {
@@ -366,7 +369,7 @@ const Index = () => {
     }
 
     const data = recordsToExport.map((r) => ({
-      Data: new Date(r.date + "T00:00:00").toLocaleDateString("pt-BR"),
+      Data: formatDateBRFromYMD(r.date),
       Funcionário: r.employee_name,
       Entrada: r.entry_time || "--:--",
       "Saída Almoço": r.lunch_exit_time || "--:--",
@@ -419,11 +422,7 @@ const Index = () => {
   };
 
   const exportCurrentMonth = () => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = today.getMonth();
-    const firstDay = new Date(year, month, 1).toISOString().split("T")[0];
-    const lastDay = new Date(year, month + 1, 0).toISOString().split("T")[0];
+    const { firstDay, lastDay } = getMonthRangeFromYMD(getSaoPauloTodayYMD());
 
     const monthRecords = records.filter((r) => r.date >= firstDay && r.date <= lastDay);
 
@@ -432,7 +431,7 @@ const Index = () => {
       return;
     }
 
-    const monthName = today.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+    const monthName = getMonthLabelPtBrFromYMD(firstDay);
     exportToXLS(monthRecords, `registros-ponto-${monthName}.xlsx`);
   };
 
@@ -585,13 +584,9 @@ const Index = () => {
   // Filter records by month instead of specific date
   const getMonthRecords = () => {
     if (!filterDate) return records;
-    
-    const selectedDate = new Date(filterDate + "T00:00:00");
-    const year = selectedDate.getFullYear();
-    const month = selectedDate.getMonth();
-    const firstDay = new Date(year, month, 1).toISOString().split("T")[0];
-    const lastDay = new Date(year, month + 1, 0).toISOString().split("T")[0];
-    
+
+    const { firstDay, lastDay } = getMonthRangeFromYMD(filterDate);
+
     return records
       .filter((r) => r.date >= firstDay && r.date <= lastDay)
       .sort((a, b) => a.date.localeCompare(b.date)); // Sort chronologically
@@ -599,15 +594,10 @@ const Index = () => {
 
   const filteredRecords = getMonthRecords();
 
-  const currentDate = new Date().toLocaleDateString("pt-BR", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  const currentDate = getSaoPauloNowFullDatePtBr();
 
   const selectedMonthName = filterDate 
-    ? new Date(filterDate + "T00:00:00").toLocaleDateString("pt-BR", { month: "long", year: "numeric" })
+    ? getMonthLabelPtBrFromYMD(filterDate)
     : "Todos os registros";
 
   if (loading) {
@@ -748,9 +738,7 @@ const Index = () => {
                       );
                       return (
                         <tr key={record.id} className="border-b border-border hover:bg-muted/50">
-                          <td className="p-3">
-                            {new Date(record.date + "T00:00:00").toLocaleDateString("pt-BR")}
-                          </td>
+                          <td className="p-3">{formatDateBRFromYMD(record.date)}</td>
                           <td className="p-3">{record.entry_time || "--:--"}</td>
                           <td className="p-3">{record.lunch_exit_time || "--:--"}</td>
                           <td className="p-3">{record.lunch_return_time || "--:--"}</td>
@@ -803,7 +791,7 @@ const Index = () => {
             <DialogHeader>
               <DialogTitle>Editar Registro</DialogTitle>
               <DialogDescription>
-                Data: {editingRecord?.date && new Date(editingRecord.date + "T00:00:00").toLocaleDateString("pt-BR")}
+                Data: {editingRecord?.date && formatDateBRFromYMD(editingRecord.date)}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
@@ -923,7 +911,7 @@ const Index = () => {
                 Tem certeza que deseja apagar este registro? Esta ação não pode ser desfeita.
                 {recordToDelete && (
                   <div className="mt-2 text-foreground">
-                    <p><strong>Data:</strong> {new Date(recordToDelete.date + "T00:00:00").toLocaleDateString("pt-BR")}</p>
+                    <p><strong>Data:</strong> {formatDateBRFromYMD(recordToDelete.date)}</p>
                   </div>
                 )}
               </DialogDescription>
