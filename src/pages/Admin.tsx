@@ -357,28 +357,82 @@ const Admin = () => {
     });
   };
 
+  // Generate all days of a month (1-31) regardless of actual days in month
+  const generateAllDaysOfMonth = (year: number, month: number): string[] => {
+    const days: string[] = [];
+    const mm = String(month).padStart(2, "0");
+    for (let d = 1; d <= 31; d++) {
+      const dd = String(d).padStart(2, "0");
+      days.push(`${year}-${mm}-${dd}`);
+    }
+    return days;
+  };
+
+  // Format time for export (remove seconds if present, return empty if null)
+  const formatTimeForExport = (time: string | null): string => {
+    if (!time) return "";
+    return time.substring(0, 5); // HH:MM
+  };
+
   const exportToXLS = () => {
     const filteredData = getFilteredByDateRange(records);
-    const sortedData = sortRecordsChronologically(filteredData);
 
-    // Group by month for export (ascending order)
-    const groups: { [key: string]: TimeRecord[] } = {};
-    sortedData.forEach((record) => {
-      const [year, month] = record.date.split("-");
-      const key = `${year}-${month}`;
-      if (!groups[key]) {
-        groups[key] = [];
+    // Determine which months to export based on the selected date range
+    const monthsToExport: { year: number; month: number }[] = [];
+    
+    if (exportStartDate && exportEndDate) {
+      const [startYear, startMonth] = exportStartDate.split("-").map(Number);
+      const [endYear, endMonth] = exportEndDate.split("-").map(Number);
+      
+      let currentYear = startYear;
+      let currentMonth = startMonth;
+      
+      while (currentYear < endYear || (currentYear === endYear && currentMonth <= endMonth)) {
+        monthsToExport.push({ year: currentYear, month: currentMonth });
+        currentMonth++;
+        if (currentMonth > 12) {
+          currentMonth = 1;
+          currentYear++;
+        }
       }
-      groups[key].push(record);
+    } else if (filteredData.length > 0) {
+      // Use months from existing records
+      const monthSet = new Set<string>();
+      filteredData.forEach((record) => {
+        const [year, month] = record.date.split("-");
+        monthSet.add(`${year}-${month}`);
+      });
+      Array.from(monthSet)
+        .sort((a, b) => a.localeCompare(b))
+        .forEach((key) => {
+          const [year, month] = key.split("-").map(Number);
+          monthsToExport.push({ year, month });
+        });
+    }
+
+    // Create a map of records by date for quick lookup
+    const recordsByDate = new Map<string, TimeRecord[]>();
+    filteredData.forEach((record) => {
+      const existing = recordsByDate.get(record.date) || [];
+      existing.push(record);
+      recordsByDate.set(record.date, existing);
     });
 
-    // Sort group keys ascending (oldest first)
-    const sortedKeys = Object.keys(groups).sort((a, b) => a.localeCompare(b));
+    // Sort records within each date by entry_time
+    recordsByDate.forEach((recs, date) => {
+      recs.sort((a, b) => {
+        const timeA = a.entry_time || "00:00";
+        const timeB = b.entry_time || "00:00";
+        return timeA.localeCompare(timeB);
+      });
+    });
 
-    // Build export data with month headers
+    // Build export data with all days of each month
     const dataToExport: any[] = [];
-    sortedKeys.forEach((key) => {
-      const monthLabel = getMonthLabelPtBrFromYMD(`${key}-01`);
+    
+    monthsToExport.forEach(({ year, month }) => {
+      const monthLabel = getMonthLabelPtBrFromYMD(`${year}-${String(month).padStart(2, "0")}-01`);
+      
       // Add month header row
       dataToExport.push({
         "Funcionário": monthLabel.toUpperCase(),
@@ -389,17 +443,42 @@ const Admin = () => {
         "Saída Final": "",
         "Total de Horas": "",
       });
-      // Add records for this month
-      groups[key].forEach(record => {
-        dataToExport.push({
-          "Funcionário": record.employee_name,
-          "Data": formatDateBR(record.date),
-          "Entrada": record.entry_time || "-",
-          "Saída Almoço": record.lunch_exit_time || "-",
-          "Volta Almoço": record.lunch_return_time || "-",
-          "Saída Final": record.exit_time || "-",
-          "Total de Horas": record.total_hours || "-",
-        });
+
+      // Generate all 31 days for this month
+      const allDays = generateAllDaysOfMonth(year, month);
+      
+      allDays.forEach((dateStr) => {
+        const recordsForDay = recordsByDate.get(dateStr) || [];
+        
+        if (recordsForDay.length === 0) {
+          // Day without record - add blank row
+          dataToExport.push({
+            "Funcionário": "",
+            "Data": formatDateBR(dateStr),
+            "Entrada": "",
+            "Saída Almoço": "",
+            "Volta Almoço": "",
+            "Saída Final": "",
+            "Total de Horas": "",
+          });
+        } else {
+          // Add all records for this day
+          recordsForDay.forEach((record) => {
+            // Calculate total only if entry AND exit exist
+            const hasValidHours = record.entry_time && record.exit_time;
+            const totalHours = hasValidHours ? record.total_hours : "";
+            
+            dataToExport.push({
+              "Funcionário": record.employee_name,
+              "Data": formatDateBR(record.date),
+              "Entrada": formatTimeForExport(record.entry_time),
+              "Saída Almoço": formatTimeForExport(record.lunch_exit_time),
+              "Volta Almoço": formatTimeForExport(record.lunch_return_time),
+              "Saída Final": formatTimeForExport(record.exit_time),
+              "Total de Horas": totalHours || "",
+            });
+          });
+        }
       });
     });
 
