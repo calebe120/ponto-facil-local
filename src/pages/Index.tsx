@@ -618,6 +618,10 @@ const Index = () => {
               <img src={logoCvc} alt="CVC Logo" className="w-24 h-24 object-contain" />
             </div>
             <div className="flex gap-2">
+              <Button onClick={() => navigate("/financeiro")} variant="outline" size="sm">
+                <DollarSign className="w-4 h-4 mr-2" />
+                Financeiro
+              </Button>
               {role === "admin" && (
                 <Button onClick={() => navigate("/admin")} variant="default" size="sm">
                   <Shield className="w-4 h-4 mr-2" />
