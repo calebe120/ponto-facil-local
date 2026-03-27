@@ -14,6 +14,119 @@ export type Database = {
   }
   public: {
     Tables: {
+      contas_modelo: {
+        Row: {
+          categoria: string
+          created_at: string
+          descricao: string
+          dia_vencimento: number | null
+          documento: string | null
+          id: string
+          observacoes: string | null
+          pessoa: string
+          recorrente: boolean
+          tipo: Database["public"]["Enums"]["conta_tipo"]
+          updated_at: string
+          user_id: string
+          valor: number
+        }
+        Insert: {
+          categoria?: string
+          created_at?: string
+          descricao: string
+          dia_vencimento?: number | null
+          documento?: string | null
+          id?: string
+          observacoes?: string | null
+          pessoa: string
+          recorrente?: boolean
+          tipo: Database["public"]["Enums"]["conta_tipo"]
+          updated_at?: string
+          user_id: string
+          valor?: number
+        }
+        Update: {
+          categoria?: string
+          created_at?: string
+          descricao?: string
+          dia_vencimento?: number | null
+          documento?: string | null
+          id?: string
+          observacoes?: string | null
+          pessoa?: string
+          recorrente?: boolean
+          tipo?: Database["public"]["Enums"]["conta_tipo"]
+          updated_at?: string
+          user_id?: string
+          valor?: number
+        }
+        Relationships: []
+      }
+      lancamentos_financeiros: {
+        Row: {
+          categoria: string
+          conta_modelo_id: string | null
+          created_at: string
+          data_emissao: string
+          data_pagamento: string | null
+          data_vencimento: string
+          descricao: string
+          documento: string | null
+          id: string
+          observacoes: string | null
+          pessoa: string
+          status: Database["public"]["Enums"]["conta_status"]
+          tipo: Database["public"]["Enums"]["conta_tipo"]
+          updated_at: string
+          user_id: string
+          valor: number
+        }
+        Insert: {
+          categoria?: string
+          conta_modelo_id?: string | null
+          created_at?: string
+          data_emissao?: string
+          data_pagamento?: string | null
+          data_vencimento: string
+          descricao: string
+          documento?: string | null
+          id?: string
+          observacoes?: string | null
+          pessoa: string
+          status?: Database["public"]["Enums"]["conta_status"]
+          tipo: Database["public"]["Enums"]["conta_tipo"]
+          updated_at?: string
+          user_id: string
+          valor?: number
+        }
+        Update: {
+          categoria?: string
+          conta_modelo_id?: string | null
+          created_at?: string
+          data_emissao?: string
+          data_pagamento?: string | null
+          data_vencimento?: string
+          descricao?: string
+          documento?: string | null
+          id?: string
+          observacoes?: string | null
+          pessoa?: string
+          status?: Database["public"]["Enums"]["conta_status"]
+          tipo?: Database["public"]["Enums"]["conta_tipo"]
+          updated_at?: string
+          user_id?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lancamentos_financeiros_conta_modelo_id_fkey"
+            columns: ["conta_modelo_id"]
+            isOneToOne: false
+            referencedRelation: "contas_modelo"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       time_records: {
         Row: {
           created_at: string
@@ -92,6 +205,8 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "user"
+      conta_status: "aberto" | "pago" | "cancelado"
+      conta_tipo: "pagar" | "receber"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -220,6 +335,8 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "user"],
+      conta_status: ["aberto", "pago", "cancelado"],
+      conta_tipo: ["pagar", "receber"],
     },
   },
 } as const
