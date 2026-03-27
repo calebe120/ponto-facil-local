@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Clock, Users, Download, Trash2, Calendar, Edit, LogOut, Shield } from "lucide-react";
+import { Clock, Users, Download, Trash2, Calendar, Edit, LogOut, Shield, DollarSign } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import * as XLSX from "xlsx";
 import {
