@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { Plus, Pencil, Trash2, CheckCircle, LogOut, ArrowLeft, DollarSign, TrendingUp, TrendingDown, Wallet } from "lucide-react";
-import { formatDateBRFromYMD, getSaoPauloTodayYMD } from "@/lib/brazil-datetime";
+import { formatDateBRFromYMD, getSaoPauloTodayYMD, getMonthRangeFromYMD, getMonthLabelPtBrFromYMD } from "@/lib/brazil-datetime";
 
 interface Lancamento {
   id: string;
