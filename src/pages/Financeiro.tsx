@@ -246,23 +246,6 @@ const Financeiro = () => {
         return;
       }
 
-      // If recurring, create modelo first
-      if (!editingId && form.recorrente) {
-        const diaVenc = form.dia_vencimento ? parseInt(form.dia_vencimento) : null;
-        await supabase.from("contas_modelo").insert({
-          user_id: user.id,
-          tipo: form.tipo,
-          descricao: form.descricao,
-          pessoa: form.pessoa,
-          categoria: form.categoria,
-          valor: valorNum,
-          recorrente: true,
-          dia_vencimento: diaVenc,
-          observacoes: form.observacoes,
-          documento: form.documento,
-        });
-      }
-
       if (editingId) {
         const { error } = await supabase
           .from("lancamentos_financeiros")
@@ -281,6 +264,44 @@ const Financeiro = () => {
 
         if (error) throw error;
         toast.success("Lançamento atualizado");
+      } else if (form.recorrente) {
+        const diaVenc = form.dia_vencimento ? parseInt(form.dia_vencimento) : null;
+        const { data: modelo, error: modeloError } = await supabase
+          .from("contas_modelo")
+          .insert({
+            user_id: user.id,
+            tipo: form.tipo,
+            descricao: form.descricao,
+            pessoa: form.pessoa,
+            categoria: form.categoria,
+            valor: valorNum,
+            recorrente: true,
+            dia_vencimento: diaVenc,
+            observacoes: form.observacoes,
+            documento: form.documento,
+          })
+          .select("id")
+          .single();
+
+        if (modeloError) throw modeloError;
+
+        const { error } = await supabase.from("lancamentos_financeiros").upsert({
+          user_id: user.id,
+          conta_modelo_id: modelo.id,
+          tipo: form.tipo,
+          descricao: form.descricao,
+          pessoa: form.pessoa,
+          categoria: form.categoria,
+          valor: valorNum,
+          data_emissao: form.data_emissao,
+          data_vencimento: form.data_vencimento,
+          observacoes: form.observacoes,
+          documento: form.documento,
+          status: "aberto",
+        }, { onConflict: "conta_modelo_id,data_vencimento", ignoreDuplicates: true });
+
+        if (error) throw error;
+        toast.success("Lançamento recorrente criado");
       } else {
         const { error } = await supabase.from("lancamentos_financeiros").insert({
           user_id: user.id,
