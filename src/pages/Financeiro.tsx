@@ -448,6 +448,19 @@ const Financeiro = () => {
               <Button
                 variant="outline"
                 size="sm"
+                onClick={() => {
+                  const r = getMonthRangeFromYMD(getSaoPauloTodayYMD());
+                  setFilterStart(r.firstDay);
+                  setFilterEnd(r.lastDay);
+                  setFilterTipo("todos");
+                  setFilterStatus("todos");
+                }}
+              >
+                Mês atual
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => { setFilterStart(""); setFilterEnd(""); setFilterTipo("todos"); setFilterStatus("todos"); }}
               >
                 Limpar
