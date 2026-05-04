@@ -72,8 +72,9 @@ const Financeiro = () => {
   // Filters
   const [filterTipo, setFilterTipo] = useState<"todos" | "pagar" | "receber">("todos");
   const [filterStatus, setFilterStatus] = useState<"todos" | "aberto" | "pago" | "cancelado">("todos");
-  const [filterStart, setFilterStart] = useState("");
-  const [filterEnd, setFilterEnd] = useState("");
+  const currentMonthRange = getMonthRangeFromYMD(getSaoPauloTodayYMD());
+  const [filterStart, setFilterStart] = useState(currentMonthRange.firstDay);
+  const [filterEnd, setFilterEnd] = useState(currentMonthRange.lastDay);
 
   // Form dialog
   const [formOpen, setFormOpen] = useState(false);
