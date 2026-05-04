@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { Plus, Pencil, Trash2, CheckCircle, LogOut, ArrowLeft, DollarSign, TrendingUp, TrendingDown, Wallet } from "lucide-react";
-import { formatDateBRFromYMD, getSaoPauloTodayYMD } from "@/lib/brazil-datetime";
+import { formatDateBRFromYMD, getSaoPauloTodayYMD, getMonthRangeFromYMD, getMonthLabelPtBrFromYMD } from "@/lib/brazil-datetime";
 
 interface Lancamento {
   id: string;
@@ -72,8 +72,9 @@ const Financeiro = () => {
   // Filters
   const [filterTipo, setFilterTipo] = useState<"todos" | "pagar" | "receber">("todos");
   const [filterStatus, setFilterStatus] = useState<"todos" | "aberto" | "pago" | "cancelado">("todos");
-  const [filterStart, setFilterStart] = useState("");
-  const [filterEnd, setFilterEnd] = useState("");
+  const currentMonthRange = getMonthRangeFromYMD(getSaoPauloTodayYMD());
+  const [filterStart, setFilterStart] = useState(currentMonthRange.firstDay);
+  const [filterEnd, setFilterEnd] = useState(currentMonthRange.lastDay);
 
   // Form dialog
   const [formOpen, setFormOpen] = useState(false);
@@ -446,6 +447,19 @@ const Financeiro = () => {
               </div>
               <Button
                 variant="outline"
+                size="sm"
+                onClick={() => {
+                  const r = getMonthRangeFromYMD(getSaoPauloTodayYMD());
+                  setFilterStart(r.firstDay);
+                  setFilterEnd(r.lastDay);
+                  setFilterTipo("todos");
+                  setFilterStatus("todos");
+                }}
+              >
+                Mês atual
+              </Button>
+              <Button
+                variant="ghost"
                 size="sm"
                 onClick={() => { setFilterStart(""); setFilterEnd(""); setFilterTipo("todos"); setFilterStatus("todos"); }}
               >
