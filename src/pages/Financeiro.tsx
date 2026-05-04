@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -148,7 +148,7 @@ const Financeiro = () => {
         const dia = modelo.dia_vencimento || 1;
         const vencimento = `${y}-${String(m).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
 
-        await supabase.from("lancamentos_financeiros").insert({
+        await supabase.from("lancamentos_financeiros").upsert({
           user_id: modelo.user_id,
           conta_modelo_id: modelo.id,
           tipo: modelo.tipo,
@@ -161,15 +161,17 @@ const Financeiro = () => {
           status: "aberto",
           observacoes: modelo.observacoes || "",
           documento: modelo.documento || "",
-        });
+        }, { onConflict: "conta_modelo_id,data_vencimento", ignoreDuplicates: true });
       }
     } catch (e) {
       console.error("Error generating recurring:", e);
     }
   }, [user]);
 
+  const recurringRanRef = useRef(false);
   useEffect(() => {
-    if (user) {
+    if (user && !recurringRanRef.current) {
+      recurringRanRef.current = true;
       generateRecurring().then(() => loadLancamentos());
     }
   }, [user, generateRecurring, loadLancamentos]);
