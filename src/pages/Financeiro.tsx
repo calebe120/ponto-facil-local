@@ -161,15 +161,17 @@ const Financeiro = () => {
           status: "aberto",
           observacoes: modelo.observacoes || "",
           documento: modelo.documento || "",
-        });
+        } as any, { onConflict: "conta_modelo_id,data_vencimento", ignoreDuplicates: true } as any);
       }
     } catch (e) {
       console.error("Error generating recurring:", e);
     }
   }, [user]);
 
+  const recurringRanRef = useRef(false);
   useEffect(() => {
-    if (user) {
+    if (user && !recurringRanRef.current) {
+      recurringRanRef.current = true;
       generateRecurring().then(() => loadLancamentos());
     }
   }, [user, generateRecurring, loadLancamentos]);
