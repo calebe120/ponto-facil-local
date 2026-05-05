@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
-import { Plus, Pencil, Trash2, CheckCircle, LogOut, ArrowLeft, DollarSign, TrendingUp, TrendingDown, Wallet } from "lucide-react";
+import { Plus, Pencil, Trash2, CheckCircle, LogOut, ArrowLeft, DollarSign, TrendingUp, TrendingDown, Wallet, FileDown } from "lucide-react";
 import { formatDateBRFromYMD, getSaoPauloTodayYMD, getMonthRangeFromYMD, getMonthLabelPtBrFromYMD } from "@/lib/brazil-datetime";
 
 interface Lancamento {
