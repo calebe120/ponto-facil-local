@@ -13,8 +13,39 @@ const Auth = () => {
   const [password, setPassword] = useState("");
   const [employeeName, setEmployeeName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  const handleResetPassword = async () => {
+    if (!email) {
+      toast({
+        title: "Informe o e-mail",
+        description: "Digite seu e-mail no campo acima para redefinir a senha.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setResetLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) throw error;
+      toast({
+        title: "E-mail enviado",
+        description: "Verifique sua caixa de entrada para redefinir a senha.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Não foi possível enviar o e-mail.",
+        variant: "destructive",
+      });
+    } finally {
+      setResetLoading(false);
+    }
+  };
 
   useEffect(() => {
     // Verificar se já está logado
@@ -159,6 +190,18 @@ const Auth = () => {
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Carregando..." : isLogin ? "Entrar" : "Cadastrar"}
             </Button>
+
+            {isLogin && (
+              <Button
+                type="button"
+                variant="link"
+                className="w-full"
+                onClick={handleResetPassword}
+                disabled={resetLoading}
+              >
+                {resetLoading ? "Enviando..." : "Esqueci minha senha"}
+              </Button>
+            )}
 
             <Button
               type="button"
