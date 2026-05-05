@@ -385,6 +385,48 @@ const Financeiro = () => {
     navigate("/auth");
   };
 
+  const exportRelatorio = () => {
+    if (filtered.length === 0) {
+      toast.error("Nenhum lançamento para exportar");
+      return;
+    }
+    const headers = ["Tipo", "Descrição", "Pessoa", "Categoria", "Emissão", "Vencimento", "Pagamento", "Valor", "Status", "Documento", "Observações"];
+    const rows = filtered.map((l) => [
+      l.tipo === "pagar" ? "A Pagar" : "A Receber",
+      l.descricao,
+      l.pessoa,
+      l.categoria,
+      formatDateBRFromYMD(l.data_emissao),
+      formatDateBRFromYMD(l.data_vencimento),
+      l.data_pagamento ? formatDateBRFromYMD(l.data_pagamento) : "",
+      Number(l.valor).toFixed(2).replace(".", ","),
+      l.status,
+      l.documento || "",
+      (l.observacoes || "").replace(/\n/g, " "),
+    ]);
+    const totalPagarAll = filtered.filter((l) => l.tipo === "pagar").reduce((s, l) => s + Number(l.valor), 0);
+    const totalReceberAll = filtered.filter((l) => l.tipo === "receber").reduce((s, l) => s + Number(l.valor), 0);
+    const escape = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
+    const csv = [
+      headers.map(escape).join(";"),
+      ...rows.map((r) => r.map((c) => escape(String(c))).join(";")),
+      "",
+      ["", "", "", "", "", "", "Total a Pagar", totalPagarAll.toFixed(2).replace(".", ","), "", "", ""].map(escape).join(";"),
+      ["", "", "", "", "", "", "Total a Receber", totalReceberAll.toFixed(2).replace(".", ","), "", "", ""].map(escape).join(";"),
+      ["", "", "", "", "", "", "Saldo", (totalReceberAll - totalPagarAll).toFixed(2).replace(".", ","), "", "", ""].map(escape).join(";"),
+    ].join("\n");
+    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `relatorio-financeiro-${filterStart || "inicio"}-a-${filterEnd || "fim"}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success("Relatório exportado");
+  };
+
   if (loading || authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
