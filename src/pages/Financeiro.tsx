@@ -75,6 +75,9 @@ const Financeiro = () => {
   const currentMonthRange = getMonthRangeFromYMD(getSaoPauloTodayYMD());
   const [filterStart, setFilterStart] = useState(currentMonthRange.firstDay);
   const [filterEnd, setFilterEnd] = useState(currentMonthRange.lastDay);
+  // Draft (UI inputs) — only applied on "Pesquisar"
+  const [draftStart, setDraftStart] = useState(currentMonthRange.firstDay);
+  const [draftEnd, setDraftEnd] = useState(currentMonthRange.lastDay);
 
   // Form dialog
   const [formOpen, setFormOpen] = useState(false);
@@ -116,9 +119,9 @@ const Financeiro = () => {
     }
   }, [user]);
 
-  // Generate recurring entries on load
-  const generateRecurring = useCallback(async () => {
-    if (!user) return;
+  // Generate recurring entries for a given month range (inclusive of all months touched by start..end)
+  const generateRecurringForRange = useCallback(async (startYMD: string, endYMD: string) => {
+    if (!user || !startYMD || !endYMD) return;
     try {
       const { data: modelos, error } = await supabase
         .from("contas_modelo")
@@ -127,41 +130,45 @@ const Financeiro = () => {
 
       if (error || !modelos) return;
 
+      const [sy, sm] = startYMD.split("-").map(Number);
+      const [ey, em] = endYMD.split("-").map(Number);
+      if (!sy || !sm || !ey || !em) return;
+
+      // Build list of (year, month) tuples in the range
+      const months: { y: number; m: number }[] = [];
+      let cy = sy;
+      let cm = sm;
+      while (cy < ey || (cy === ey && cm <= em)) {
+        months.push({ y: cy, m: cm });
+        cm += 1;
+        if (cm > 12) { cm = 1; cy += 1; }
+      }
+
       const today = getSaoPauloTodayYMD();
-      const [y, m] = today.split("-").map(Number);
 
       for (const modelo of modelos as any[]) {
-        // Check if entry already exists for this month
-        const monthStart = `${y}-${String(m).padStart(2, "0")}-01`;
-        const monthEnd = `${y}-${String(m).padStart(2, "0")}-31`;
-
-        const { data: existing } = await supabase
-          .from("lancamentos_financeiros")
-          .select("id")
-          .eq("conta_modelo_id", modelo.id)
-          .gte("data_vencimento", monthStart)
-          .lte("data_vencimento", monthEnd)
-          .limit(1);
-
-        if (existing && existing.length > 0) continue;
-
         const dia = modelo.dia_vencimento || 1;
-        const vencimento = `${y}-${String(m).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+        for (const { y, m } of months) {
+          // Clamp day to the last day of that month
+          const lastDay = new Date(y, m, 0).getDate();
+          const realDia = Math.min(dia, lastDay);
+          const vencimento = `${y}-${String(m).padStart(2, "0")}-${String(realDia).padStart(2, "0")}`;
 
-        await supabase.from("lancamentos_financeiros").upsert({
-          user_id: modelo.user_id,
-          conta_modelo_id: modelo.id,
-          tipo: modelo.tipo,
-          descricao: modelo.descricao,
-          pessoa: modelo.pessoa,
-          categoria: modelo.categoria,
-          valor: modelo.valor,
-          data_emissao: today,
-          data_vencimento: vencimento,
-          status: "aberto",
-          observacoes: modelo.observacoes || "",
-          documento: modelo.documento || "",
-        }, { onConflict: "conta_modelo_id,data_vencimento", ignoreDuplicates: true });
+          await supabase.from("lancamentos_financeiros").upsert({
+            user_id: modelo.user_id,
+            conta_modelo_id: modelo.id,
+            tipo: modelo.tipo,
+            descricao: modelo.descricao,
+            pessoa: modelo.pessoa,
+            categoria: modelo.categoria,
+            valor: modelo.valor,
+            data_emissao: vencimento <= today ? vencimento : today,
+            data_vencimento: vencimento,
+            status: "aberto",
+            observacoes: modelo.observacoes || "",
+            documento: modelo.documento || "",
+          }, { onConflict: "conta_modelo_id,data_vencimento", ignoreDuplicates: true });
+        }
       }
     } catch (e) {
       console.error("Error generating recurring:", e);
@@ -172,9 +179,20 @@ const Financeiro = () => {
   useEffect(() => {
     if (user && !recurringRanRef.current) {
       recurringRanRef.current = true;
-      generateRecurring().then(() => loadLancamentos());
+      generateRecurringForRange(currentMonthRange.firstDay, currentMonthRange.lastDay).then(() => loadLancamentos());
     }
-  }, [user, generateRecurring, loadLancamentos]);
+  }, [user, generateRecurringForRange, loadLancamentos, currentMonthRange.firstDay, currentMonthRange.lastDay]);
+
+  const handlePesquisar = async () => {
+    setFilterStart(draftStart);
+    setFilterEnd(draftEnd);
+    if (draftStart && draftEnd) {
+      await generateRecurringForRange(draftStart, draftEnd);
+      await loadLancamentos();
+    } else {
+      await loadLancamentos();
+    }
+  };
 
   // Filters
   const filtered = lancamentos.filter((l) => {
@@ -462,21 +480,28 @@ const Financeiro = () => {
               </div>
               <div className="w-40">
                 <Label className="text-xs">Data Inicial</Label>
-                <Input type="date" value={filterStart} onChange={(e) => setFilterStart(e.target.value)} />
+                <Input type="date" value={draftStart} onChange={(e) => setDraftStart(e.target.value)} />
               </div>
               <div className="w-40">
                 <Label className="text-xs">Data Final</Label>
-                <Input type="date" value={filterEnd} onChange={(e) => setFilterEnd(e.target.value)} />
+                <Input type="date" value={draftEnd} onChange={(e) => setDraftEnd(e.target.value)} />
               </div>
+              <Button size="sm" onClick={handlePesquisar}>
+                Pesquisar
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
+                onClick={async () => {
                   const r = getMonthRangeFromYMD(getSaoPauloTodayYMD());
+                  setDraftStart(r.firstDay);
+                  setDraftEnd(r.lastDay);
                   setFilterStart(r.firstDay);
                   setFilterEnd(r.lastDay);
                   setFilterTipo("todos");
                   setFilterStatus("todos");
+                  await generateRecurringForRange(r.firstDay, r.lastDay);
+                  await loadLancamentos();
                 }}
               >
                 Mês atual
@@ -484,7 +509,14 @@ const Financeiro = () => {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => { setFilterStart(""); setFilterEnd(""); setFilterTipo("todos"); setFilterStatus("todos"); }}
+                onClick={() => {
+                  setDraftStart("");
+                  setDraftEnd("");
+                  setFilterStart("");
+                  setFilterEnd("");
+                  setFilterTipo("todos");
+                  setFilterStatus("todos");
+                }}
               >
                 Limpar
               </Button>
