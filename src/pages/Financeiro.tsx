@@ -480,21 +480,28 @@ const Financeiro = () => {
               </div>
               <div className="w-40">
                 <Label className="text-xs">Data Inicial</Label>
-                <Input type="date" value={filterStart} onChange={(e) => setFilterStart(e.target.value)} />
+                <Input type="date" value={draftStart} onChange={(e) => setDraftStart(e.target.value)} />
               </div>
               <div className="w-40">
                 <Label className="text-xs">Data Final</Label>
-                <Input type="date" value={filterEnd} onChange={(e) => setFilterEnd(e.target.value)} />
+                <Input type="date" value={draftEnd} onChange={(e) => setDraftEnd(e.target.value)} />
               </div>
+              <Button size="sm" onClick={handlePesquisar}>
+                Pesquisar
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
+                onClick={async () => {
                   const r = getMonthRangeFromYMD(getSaoPauloTodayYMD());
+                  setDraftStart(r.firstDay);
+                  setDraftEnd(r.lastDay);
                   setFilterStart(r.firstDay);
                   setFilterEnd(r.lastDay);
                   setFilterTipo("todos");
                   setFilterStatus("todos");
+                  await generateRecurringForRange(r.firstDay, r.lastDay);
+                  await loadLancamentos();
                 }}
               >
                 Mês atual
@@ -502,7 +509,14 @@ const Financeiro = () => {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => { setFilterStart(""); setFilterEnd(""); setFilterTipo("todos"); setFilterStatus("todos"); }}
+                onClick={() => {
+                  setDraftStart("");
+                  setDraftEnd("");
+                  setFilterStart("");
+                  setFilterEnd("");
+                  setFilterTipo("todos");
+                  setFilterStatus("todos");
+                }}
               >
                 Limpar
               </Button>
