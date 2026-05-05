@@ -75,6 +75,9 @@ const Financeiro = () => {
   const currentMonthRange = getMonthRangeFromYMD(getSaoPauloTodayYMD());
   const [filterStart, setFilterStart] = useState(currentMonthRange.firstDay);
   const [filterEnd, setFilterEnd] = useState(currentMonthRange.lastDay);
+  // Draft (UI inputs) — only applied on "Pesquisar"
+  const [draftStart, setDraftStart] = useState(currentMonthRange.firstDay);
+  const [draftEnd, setDraftEnd] = useState(currentMonthRange.lastDay);
 
   // Form dialog
   const [formOpen, setFormOpen] = useState(false);
