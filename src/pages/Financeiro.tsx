@@ -562,7 +562,10 @@ const Financeiro = () => {
               >
                 Limpar
               </Button>
-              <div className="ml-auto">
+              <div className="ml-auto flex gap-2">
+                <Button variant="outline" onClick={exportRelatorio}>
+                  <FileDown className="h-4 w-4 mr-2" /> Relatório
+                </Button>
                 <Button onClick={openNewForm}>
                   <Plus className="h-4 w-4 mr-2" /> Novo Lançamento
                 </Button>
