@@ -191,6 +191,18 @@ const Auth = () => {
               {loading ? "Carregando..." : isLogin ? "Entrar" : "Cadastrar"}
             </Button>
 
+            {isLogin && (
+              <Button
+                type="button"
+                variant="link"
+                className="w-full"
+                onClick={handleResetPassword}
+                disabled={resetLoading}
+              >
+                {resetLoading ? "Enviando..." : "Esqueci minha senha"}
+              </Button>
+            )}
+
             <Button
               type="button"
               variant="ghost"
