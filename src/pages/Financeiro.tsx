@@ -334,7 +334,7 @@ const Financeiro = () => {
           .single();
         if (modeloError) throw modeloError;
 
-        const { error } = await supabase.from("lancamentos_financeiros").upsert({
+        const { error } = await supabase.from("lancamentos_financeiros").insert({
           user_id: user.id,
           conta_modelo_id: modelo.id,
           loja_id: currentLojaId,
@@ -348,7 +348,7 @@ const Financeiro = () => {
           observacoes: form.observacoes,
           documento: form.documento,
           status: "aberto",
-        }, { onConflict: "conta_modelo_id,data_vencimento", ignoreDuplicates: true });
+        });
         if (error) throw error;
         toast.success("Lançamento recorrente criado");
       } else {
