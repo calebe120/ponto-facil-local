@@ -13,13 +13,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
-import { Plus, Pencil, Trash2, CheckCircle, LogOut, ArrowLeft, DollarSign, TrendingUp, TrendingDown, Wallet, FileDown } from "lucide-react";
-import { formatDateBRFromYMD, getSaoPauloTodayYMD, getMonthRangeFromYMD, getMonthLabelPtBrFromYMD } from "@/lib/brazil-datetime";
+import { Plus, Pencil, Trash2, CheckCircle, LogOut, ArrowLeft, DollarSign, TrendingUp, TrendingDown, Wallet, FileDown, Store } from "lucide-react";
+import { formatDateBRFromYMD, getSaoPauloTodayYMD, getMonthRangeFromYMD } from "@/lib/brazil-datetime";
 
 interface Lancamento {
   id: string;
   user_id: string;
   conta_modelo_id: string | null;
+  loja_id: string | null;
   tipo: "pagar" | "receber";
   descricao: string;
   pessoa: string;
@@ -34,18 +35,10 @@ interface Lancamento {
   created_at: string;
 }
 
-interface ContaModelo {
+interface Loja {
   id: string;
-  user_id: string;
-  tipo: "pagar" | "receber";
-  descricao: string;
-  pessoa: string;
-  categoria: string;
-  valor: number;
-  recorrente: boolean;
-  dia_vencimento: number | null;
-  observacoes: string;
-  documento: string;
+  nome: string;
+  ordem: number;
 }
 
 const defaultForm = {
@@ -62,6 +55,8 @@ const defaultForm = {
   dia_vencimento: "",
 };
 
+const ADMIN_PASSWORD = "3255";
+
 const Financeiro = () => {
   const navigate = useNavigate();
   const { user, session, loading: authLoading } = useAuth();
@@ -69,13 +64,16 @@ const Financeiro = () => {
   const [lancamentos, setLancamentos] = useState<Lancamento[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Lojas (tabs)
+  const [lojas, setLojas] = useState<Loja[]>([]);
+  const [currentLojaId, setCurrentLojaId] = useState<string | null>(null);
+
   // Filters
   const [filterTipo, setFilterTipo] = useState<"todos" | "pagar" | "receber">("todos");
   const [filterStatus, setFilterStatus] = useState<"todos" | "aberto" | "pago" | "cancelado">("todos");
   const currentMonthRange = getMonthRangeFromYMD(getSaoPauloTodayYMD());
   const [filterStart, setFilterStart] = useState(currentMonthRange.firstDay);
   const [filterEnd, setFilterEnd] = useState(currentMonthRange.lastDay);
-  // Draft (UI inputs) — only applied on "Pesquisar"
   const [draftStart, setDraftStart] = useState(currentMonthRange.firstDay);
   const [draftEnd, setDraftEnd] = useState(currentMonthRange.lastDay);
 
@@ -93,51 +91,85 @@ const Financeiro = () => {
   const [liquidarId, setLiquidarId] = useState<string | null>(null);
   const [liquidarDate, setLiquidarDate] = useState(getSaoPauloTodayYMD());
 
+  // Loja dialogs
+  const [lojaDialogOpen, setLojaDialogOpen] = useState(false);
+  const [lojaEditing, setLojaEditing] = useState<Loja | null>(null);
+  const [lojaNome, setLojaNome] = useState("");
+  const [lojaPassword, setLojaPassword] = useState("");
+  const [lojaDeleteOpen, setLojaDeleteOpen] = useState(false);
+  const [lojaDeleteTarget, setLojaDeleteTarget] = useState<Loja | null>(null);
+  const [lojaDeletePwd, setLojaDeletePwd] = useState("");
+
   useEffect(() => {
     if (!authLoading) {
-      if (!session) {
-        navigate("/auth");
-      } else {
-        setLoading(false);
-      }
+      if (!session) navigate("/auth");
     }
   }, [authLoading, session, navigate]);
 
-  const loadLancamentos = useCallback(async () => {
+  // Load lojas; bootstrap a default one if none exists; migrate any orphan rows
+  const loadLojas = useCallback(async () => {
     if (!user) return;
-    try {
-      const { data, error } = await supabase
-        .from("lancamentos_financeiros")
-        .select("*")
-        .order("data_vencimento", { ascending: true });
-
-      if (error) throw error;
-      setLancamentos((data as any[]) || []);
-    } catch (e: any) {
-      console.error(e);
-      toast.error("Erro ao carregar lançamentos");
+    const { data, error } = await supabase
+      .from("lojas")
+      .select("*")
+      .order("ordem", { ascending: true })
+      .order("created_at", { ascending: true });
+    if (error) {
+      console.error(error);
+      return;
     }
+    let list = (data as Loja[]) || [];
+    if (list.length === 0) {
+      const { data: novo, error: e2 } = await supabase
+        .from("lojas")
+        .insert({ user_id: user.id, nome: "Loja Principal", ordem: 0 })
+        .select("*")
+        .single();
+      if (e2) {
+        console.error(e2);
+        return;
+      }
+      list = [novo as Loja];
+      // Migrate existing rows without loja_id to this loja
+      await supabase.from("lancamentos_financeiros").update({ loja_id: novo.id }).is("loja_id", null);
+      await supabase.from("contas_modelo").update({ loja_id: novo.id }).is("loja_id", null);
+    }
+    setLojas(list);
+    setCurrentLojaId((prev) => prev && list.some((l) => l.id === prev) ? prev : list[0].id);
   }, [user]);
 
-  // Generate recurring entries for a given month range (inclusive of all months touched by start..end)
-  const generateRecurringForRange = useCallback(async (startYMD: string, endYMD: string) => {
-    if (!user || !startYMD || !endYMD) return;
+  const loadLancamentos = useCallback(async (lojaId: string) => {
+    if (!user || !lojaId) return;
+    const { data, error } = await supabase
+      .from("lancamentos_financeiros")
+      .select("*")
+      .eq("loja_id", lojaId)
+      .order("data_vencimento", { ascending: true });
+    if (error) {
+      console.error(error);
+      toast.error("Erro ao carregar lançamentos");
+      return;
+    }
+    setLancamentos((data as any[]) || []);
+  }, [user]);
+
+  // Generate recurring entries for the current loja for a given month range
+  const generateRecurringForRange = useCallback(async (lojaId: string, startYMD: string, endYMD: string) => {
+    if (!user || !lojaId || !startYMD || !endYMD) return;
     try {
       const { data: modelos, error } = await supabase
         .from("contas_modelo")
         .select("*")
-        .eq("recorrente", true);
-
+        .eq("recorrente", true)
+        .eq("loja_id", lojaId);
       if (error || !modelos) return;
 
       const [sy, sm] = startYMD.split("-").map(Number);
       const [ey, em] = endYMD.split("-").map(Number);
       if (!sy || !sm || !ey || !em) return;
 
-      // Build list of (year, month) tuples in the range
       const months: { y: number; m: number }[] = [];
-      let cy = sy;
-      let cm = sm;
+      let cy = sy, cm = sm;
       while (cy < ey || (cy === ey && cm <= em)) {
         months.push({ y: cy, m: cm });
         cm += 1;
@@ -149,14 +181,13 @@ const Financeiro = () => {
       for (const modelo of modelos as any[]) {
         const dia = modelo.dia_vencimento || 1;
         for (const { y, m } of months) {
-          // Clamp day to the last day of that month
           const lastDay = new Date(y, m, 0).getDate();
           const realDia = Math.min(dia, lastDay);
           const vencimento = `${y}-${String(m).padStart(2, "0")}-${String(realDia).padStart(2, "0")}`;
-
           await supabase.from("lancamentos_financeiros").upsert({
             user_id: modelo.user_id,
             conta_modelo_id: modelo.id,
+            loja_id: lojaId,
             tipo: modelo.tipo,
             descricao: modelo.descricao,
             pessoa: modelo.pessoa,
@@ -175,26 +206,36 @@ const Financeiro = () => {
     }
   }, [user]);
 
-  const recurringRanRef = useRef(false);
+  // Bootstrap on user
   useEffect(() => {
-    if (user && !recurringRanRef.current) {
-      recurringRanRef.current = true;
-      generateRecurringForRange(currentMonthRange.firstDay, currentMonthRange.lastDay).then(() => loadLancamentos());
+    if (user) {
+      loadLojas().finally(() => setLoading(false));
     }
-  }, [user, generateRecurringForRange, loadLancamentos, currentMonthRange.firstDay, currentMonthRange.lastDay]);
+  }, [user, loadLojas]);
+
+  // When loja changes, generate recurring + load
+  const initRanRef = useRef<Record<string, boolean>>({});
+  useEffect(() => {
+    if (!currentLojaId) return;
+    (async () => {
+      if (!initRanRef.current[currentLojaId]) {
+        initRanRef.current[currentLojaId] = true;
+        await generateRecurringForRange(currentLojaId, currentMonthRange.firstDay, currentMonthRange.lastDay);
+      }
+      await loadLancamentos(currentLojaId);
+    })();
+  }, [currentLojaId, generateRecurringForRange, loadLancamentos, currentMonthRange.firstDay, currentMonthRange.lastDay]);
 
   const handlePesquisar = async () => {
+    if (!currentLojaId) return;
     setFilterStart(draftStart);
     setFilterEnd(draftEnd);
     if (draftStart && draftEnd) {
-      await generateRecurringForRange(draftStart, draftEnd);
-      await loadLancamentos();
-    } else {
-      await loadLancamentos();
+      await generateRecurringForRange(currentLojaId, draftStart, draftEnd);
     }
+    await loadLancamentos(currentLojaId);
   };
 
-  // Filters
   const filtered = lancamentos.filter((l) => {
     if (filterTipo !== "todos" && l.tipo !== filterTipo) return false;
     if (filterStatus !== "todos" && l.status !== filterStatus) return false;
@@ -203,29 +244,21 @@ const Financeiro = () => {
     return true;
   });
 
-  // Dashboard
   const today = getSaoPauloTodayYMD();
-  const totalPagar = filtered
-    .filter((l) => l.tipo === "pagar" && l.status === "aberto")
-    .reduce((s, l) => s + Number(l.valor), 0);
-  const totalReceber = filtered
-    .filter((l) => l.tipo === "receber" && l.status === "aberto")
-    .reduce((s, l) => s + Number(l.valor), 0);
+  const totalPagar = filtered.filter((l) => l.tipo === "pagar" && l.status === "aberto").reduce((s, l) => s + Number(l.valor), 0);
+  const totalReceber = filtered.filter((l) => l.tipo === "receber" && l.status === "aberto").reduce((s, l) => s + Number(l.valor), 0);
   const saldoPrevisto = totalReceber - totalPagar;
 
-  const formatCurrency = (v: number) =>
-    v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const formatCurrency = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
   const getStatusBadge = (l: Lancamento) => {
     if (l.status === "pago") return <Badge className="bg-green-600 text-white">Pago</Badge>;
     if (l.status === "cancelado") return <Badge variant="secondary">Cancelado</Badge>;
-    // aberto
     if (l.data_vencimento < today) return <Badge className="bg-red-600 text-white">Vencido</Badge>;
     if (l.data_vencimento === today) return <Badge className="bg-yellow-500 text-black">Vence Hoje</Badge>;
     return <Badge variant="outline">Aberto</Badge>;
   };
 
-  // Form handlers
   const openNewForm = () => {
     setEditingId(null);
     setForm(defaultForm);
@@ -251,12 +284,11 @@ const Financeiro = () => {
   };
 
   const saveForm = async () => {
-    if (!user) return;
+    if (!user || !currentLojaId) return;
     if (!form.descricao || !form.pessoa || !form.valor || !form.data_vencimento) {
       toast.error("Preencha os campos obrigatórios");
       return;
     }
-
     try {
       const valorNum = parseFloat(form.valor.replace(",", "."));
       if (isNaN(valorNum) || valorNum <= 0) {
@@ -279,7 +311,6 @@ const Financeiro = () => {
             documento: form.documento,
           })
           .eq("id", editingId);
-
         if (error) throw error;
         toast.success("Lançamento atualizado");
       } else if (form.recorrente) {
@@ -288,6 +319,7 @@ const Financeiro = () => {
           .from("contas_modelo")
           .insert({
             user_id: user.id,
+            loja_id: currentLojaId,
             tipo: form.tipo,
             descricao: form.descricao,
             pessoa: form.pessoa,
@@ -300,12 +332,12 @@ const Financeiro = () => {
           })
           .select("id")
           .single();
-
         if (modeloError) throw modeloError;
 
         const { error } = await supabase.from("lancamentos_financeiros").upsert({
           user_id: user.id,
           conta_modelo_id: modelo.id,
+          loja_id: currentLojaId,
           tipo: form.tipo,
           descricao: form.descricao,
           pessoa: form.pessoa,
@@ -317,12 +349,12 @@ const Financeiro = () => {
           documento: form.documento,
           status: "aberto",
         }, { onConflict: "conta_modelo_id,data_vencimento", ignoreDuplicates: true });
-
         if (error) throw error;
         toast.success("Lançamento recorrente criado");
       } else {
         const { error } = await supabase.from("lancamentos_financeiros").insert({
           user_id: user.id,
+          loja_id: currentLojaId,
           tipo: form.tipo,
           descricao: form.descricao,
           pessoa: form.pessoa,
@@ -339,7 +371,7 @@ const Financeiro = () => {
       }
 
       setFormOpen(false);
-      await loadLancamentos();
+      await loadLancamentos(currentLojaId);
     } catch (e: any) {
       console.error(e);
       toast.error("Erro ao salvar");
@@ -347,16 +379,13 @@ const Financeiro = () => {
   };
 
   const handleDelete = async () => {
-    if (!deleteId) return;
+    if (!deleteId || !currentLojaId) return;
     try {
-      const { error } = await supabase
-        .from("lancamentos_financeiros")
-        .delete()
-        .eq("id", deleteId);
+      const { error } = await supabase.from("lancamentos_financeiros").delete().eq("id", deleteId);
       if (error) throw error;
       toast.success("Lançamento excluído");
       setDeleteOpen(false);
-      await loadLancamentos();
+      await loadLancamentos(currentLojaId);
     } catch (e: any) {
       console.error(e);
       toast.error("Erro ao excluir");
@@ -364,7 +393,7 @@ const Financeiro = () => {
   };
 
   const handleLiquidar = async () => {
-    if (!liquidarId) return;
+    if (!liquidarId || !currentLojaId) return;
     try {
       const { error } = await supabase
         .from("lancamentos_financeiros")
@@ -373,7 +402,7 @@ const Financeiro = () => {
       if (error) throw error;
       toast.success("Conta liquidada");
       setLiquidarOpen(false);
-      await loadLancamentos();
+      await loadLancamentos(currentLojaId);
     } catch (e: any) {
       console.error(e);
       toast.error("Erro ao liquidar");
@@ -385,11 +414,75 @@ const Financeiro = () => {
     navigate("/auth");
   };
 
+  // ===== Lojas handlers =====
+  const openNewLoja = () => {
+    setLojaEditing(null);
+    setLojaNome("");
+    setLojaPassword("");
+    setLojaDialogOpen(true);
+  };
+
+  const openEditLoja = (loja: Loja) => {
+    setLojaEditing(loja);
+    setLojaNome(loja.nome);
+    setLojaPassword("");
+    setLojaDialogOpen(true);
+  };
+
+  const saveLoja = async () => {
+    if (!user) return;
+    if (!lojaNome.trim()) {
+      toast.error("Informe o nome da loja");
+      return;
+    }
+    if (lojaEditing) {
+      if (lojaPassword !== ADMIN_PASSWORD) {
+        toast.error("Senha incorreta");
+        return;
+      }
+      const { error } = await supabase.from("lojas").update({ nome: lojaNome.trim() }).eq("id", lojaEditing.id);
+      if (error) { toast.error("Erro ao salvar"); return; }
+      toast.success("Loja atualizada");
+    } else {
+      const ordem = lojas.length;
+      const { data, error } = await supabase
+        .from("lojas")
+        .insert({ user_id: user.id, nome: lojaNome.trim(), ordem })
+        .select("*")
+        .single();
+      if (error) { toast.error("Erro ao criar loja"); return; }
+      toast.success("Loja criada");
+      setCurrentLojaId((data as Loja).id);
+    }
+    setLojaDialogOpen(false);
+    await loadLojas();
+  };
+
+  const confirmDeleteLoja = async () => {
+    if (!lojaDeleteTarget) return;
+    if (lojaDeletePwd !== ADMIN_PASSWORD) {
+      toast.error("Senha incorreta");
+      return;
+    }
+    const { error } = await supabase.from("lojas").delete().eq("id", lojaDeleteTarget.id);
+    if (error) { toast.error("Erro ao excluir loja"); return; }
+    toast.success("Loja excluída");
+    setLojaDeleteOpen(false);
+    setLojaDeletePwd("");
+    const remaining = lojas.filter((l) => l.id !== lojaDeleteTarget.id);
+    if (currentLojaId === lojaDeleteTarget.id) {
+      setCurrentLojaId(remaining[0]?.id || null);
+    }
+    setLojaDeleteTarget(null);
+    await loadLojas();
+  };
+
   const exportRelatorio = () => {
     if (filtered.length === 0) {
       toast.error("Nenhum lançamento para exportar");
       return;
     }
+    const lojaNomeAtual = lojas.find((l) => l.id === currentLojaId)?.nome || "Loja";
     const headers = ["Tipo", "Descrição", "Pessoa", "Categoria", "Emissão", "Vencimento", "Pagamento", "Valor", "Status", "Documento", "Observações"];
     const rows = filtered.map((l) => [
       l.tipo === "pagar" ? "A Pagar" : "A Receber",
@@ -408,6 +501,8 @@ const Financeiro = () => {
     const totalReceberAll = filtered.filter((l) => l.tipo === "receber").reduce((s, l) => s + Number(l.valor), 0);
     const escape = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
     const csv = [
+      [`Loja: ${lojaNomeAtual}`].map(escape).join(";"),
+      "",
       headers.map(escape).join(";"),
       ...rows.map((r) => r.map((c) => escape(String(c))).join(";")),
       "",
@@ -419,7 +514,7 @@ const Financeiro = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `relatorio-financeiro-${filterStart || "inicio"}-a-${filterEnd || "fim"}.csv`;
+    a.download = `relatorio-${lojaNomeAtual.replace(/\s+/g, "_")}-${filterStart || "inicio"}-a-${filterEnd || "fim"}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -435,9 +530,10 @@ const Financeiro = () => {
     );
   }
 
+  const currentLoja = lojas.find((l) => l.id === currentLojaId);
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="bg-card border-b px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
@@ -454,13 +550,61 @@ const Financeiro = () => {
       </header>
 
       <main className="max-w-7xl mx-auto p-4 space-y-6">
+        {/* Tabs de Lojas (estilo Excel) */}
+        <Card>
+          <CardContent className="p-2">
+            <div className="flex items-center gap-1 overflow-x-auto">
+              {lojas.map((loja) => {
+                const active = loja.id === currentLojaId;
+                return (
+                  <div
+                    key={loja.id}
+                    className={`group flex items-center gap-1 px-3 py-2 rounded-t-md border-b-2 cursor-pointer whitespace-nowrap transition-colors ${
+                      active
+                        ? "bg-background border-primary text-foreground font-semibold"
+                        : "bg-muted/50 border-transparent text-muted-foreground hover:bg-muted"
+                    }`}
+                    onClick={() => setCurrentLojaId(loja.id)}
+                  >
+                    <Store className="h-3.5 w-3.5" />
+                    <span>{loja.nome}</span>
+                    {active && (
+                      <>
+                        <button
+                          className="ml-1 opacity-60 hover:opacity-100"
+                          onClick={(e) => { e.stopPropagation(); openEditLoja(loja); }}
+                          title="Renomear"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                        {lojas.length > 1 && (
+                          <button
+                            className="opacity-60 hover:opacity-100 text-destructive"
+                            onClick={(e) => { e.stopPropagation(); setLojaDeleteTarget(loja); setLojaDeletePwd(""); setLojaDeleteOpen(true); }}
+                            title="Excluir loja"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+              <Button variant="ghost" size="sm" className="ml-1" onClick={openNewLoja} title="Nova loja">
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Dashboard Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
                 <TrendingDown className="h-4 w-4 text-destructive" />
-                Total a Pagar
+                Total a Pagar {currentLoja && <span className="text-xs">— {currentLoja.nome}</span>}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -528,9 +672,7 @@ const Financeiro = () => {
                 <Label className="text-xs">Data Final</Label>
                 <Input type="date" value={draftEnd} onChange={(e) => setDraftEnd(e.target.value)} />
               </div>
-              <Button size="sm" onClick={handlePesquisar}>
-                Pesquisar
-              </Button>
+              <Button size="sm" onClick={handlePesquisar}>Pesquisar</Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -542,8 +684,10 @@ const Financeiro = () => {
                   setFilterEnd(r.lastDay);
                   setFilterTipo("todos");
                   setFilterStatus("todos");
-                  await generateRecurringForRange(r.firstDay, r.lastDay);
-                  await loadLancamentos();
+                  if (currentLojaId) {
+                    await generateRecurringForRange(currentLojaId, r.firstDay, r.lastDay);
+                    await loadLancamentos(currentLojaId);
+                  }
                 }}
               >
                 Mês atual
@@ -741,7 +885,7 @@ const Financeiro = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Dialog */}
+      {/* Delete Lançamento Dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent>
           <DialogHeader>
@@ -770,6 +914,51 @@ const Financeiro = () => {
             <Button onClick={handleLiquidar} className="bg-green-600 hover:bg-green-700 text-white">
               <CheckCircle className="h-4 w-4 mr-2" /> Confirmar Liquidação
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Loja Create/Edit Dialog */}
+      <Dialog open={lojaDialogOpen} onOpenChange={setLojaDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{lojaEditing ? "Renomear Loja" : "Nova Loja"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Nome da Loja</Label>
+              <Input value={lojaNome} onChange={(e) => setLojaNome(e.target.value)} placeholder="Ex: Loja Centro" />
+            </div>
+            {lojaEditing && (
+              <div>
+                <Label>Senha de administrador</Label>
+                <Input type="password" value={lojaPassword} onChange={(e) => setLojaPassword(e.target.value)} />
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLojaDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={saveLoja}>{lojaEditing ? "Salvar" : "Criar"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Loja Delete Dialog */}
+      <Dialog open={lojaDeleteOpen} onOpenChange={setLojaDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Excluir Loja</DialogTitle>
+          </DialogHeader>
+          <p className="text-muted-foreground">
+            Tem certeza que deseja excluir <strong>{lojaDeleteTarget?.nome}</strong>? Todos os lançamentos e contas recorrentes desta loja serão excluídos permanentemente.
+          </p>
+          <div>
+            <Label>Senha de administrador</Label>
+            <Input type="password" value={lojaDeletePwd} onChange={(e) => setLojaDeletePwd(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLojaDeleteOpen(false)}>Cancelar</Button>
+            <Button variant="destructive" onClick={confirmDeleteLoja}>Excluir</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
