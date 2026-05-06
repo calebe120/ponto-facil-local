@@ -180,11 +180,19 @@ const Financeiro = () => {
 
       for (const modelo of modelos as any[]) {
         const dia = modelo.dia_vencimento || 1;
+        // Buscar lançamentos já existentes para este modelo no range
+        const { data: existentes } = await supabase
+          .from("lancamentos_financeiros")
+          .select("data_vencimento")
+          .eq("conta_modelo_id", modelo.id);
+        const existentesSet = new Set((existentes || []).map((e: any) => e.data_vencimento));
+
         for (const { y, m } of months) {
           const lastDay = new Date(y, m, 0).getDate();
           const realDia = Math.min(dia, lastDay);
           const vencimento = `${y}-${String(m).padStart(2, "0")}-${String(realDia).padStart(2, "0")}`;
-          await supabase.from("lancamentos_financeiros").upsert({
+          if (existentesSet.has(vencimento)) continue;
+          await supabase.from("lancamentos_financeiros").insert({
             user_id: modelo.user_id,
             conta_modelo_id: modelo.id,
             loja_id: lojaId,
@@ -198,7 +206,7 @@ const Financeiro = () => {
             status: "aberto",
             observacoes: modelo.observacoes || "",
             documento: modelo.documento || "",
-          }, { onConflict: "conta_modelo_id,data_vencimento", ignoreDuplicates: true });
+          });
         }
       }
     } catch (e) {
