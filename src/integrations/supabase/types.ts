@@ -22,6 +22,7 @@ export type Database = {
           dia_vencimento: number | null
           documento: string | null
           id: string
+          loja_id: string | null
           observacoes: string | null
           pessoa: string
           recorrente: boolean
@@ -37,6 +38,7 @@ export type Database = {
           dia_vencimento?: number | null
           documento?: string | null
           id?: string
+          loja_id?: string | null
           observacoes?: string | null
           pessoa: string
           recorrente?: boolean
@@ -52,6 +54,7 @@ export type Database = {
           dia_vencimento?: number | null
           documento?: string | null
           id?: string
+          loja_id?: string | null
           observacoes?: string | null
           pessoa?: string
           recorrente?: boolean
@@ -60,7 +63,15 @@ export type Database = {
           user_id?: string
           valor?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "contas_modelo_loja_id_fkey"
+            columns: ["loja_id"]
+            isOneToOne: false
+            referencedRelation: "lojas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       lancamentos_financeiros: {
         Row: {
@@ -73,6 +84,7 @@ export type Database = {
           descricao: string
           documento: string | null
           id: string
+          loja_id: string | null
           observacoes: string | null
           pessoa: string
           status: Database["public"]["Enums"]["conta_status"]
@@ -91,6 +103,7 @@ export type Database = {
           descricao: string
           documento?: string | null
           id?: string
+          loja_id?: string | null
           observacoes?: string | null
           pessoa: string
           status?: Database["public"]["Enums"]["conta_status"]
@@ -109,6 +122,7 @@ export type Database = {
           descricao?: string
           documento?: string | null
           id?: string
+          loja_id?: string | null
           observacoes?: string | null
           pessoa?: string
           status?: Database["public"]["Enums"]["conta_status"]
@@ -125,7 +139,41 @@ export type Database = {
             referencedRelation: "contas_modelo"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "lancamentos_financeiros_loja_id_fkey"
+            columns: ["loja_id"]
+            isOneToOne: false
+            referencedRelation: "lojas"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      lojas: {
+        Row: {
+          created_at: string
+          id: string
+          nome: string
+          ordem: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          nome: string
+          ordem?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          nome?: string
+          ordem?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       time_records: {
         Row: {
