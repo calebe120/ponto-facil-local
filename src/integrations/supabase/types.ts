@@ -175,6 +175,95 @@ export type Database = {
         }
         Relationships: []
       }
+      nfse: {
+        Row: {
+          aliquota_iss: number
+          codigo_servico: string | null
+          created_at: string
+          data_emissao: string
+          descricao_servico: string
+          id: string
+          loja_id: string | null
+          numero: string
+          observacoes: string | null
+          prestador_cnpj: string
+          prestador_endereco: string | null
+          prestador_inscricao_municipal: string | null
+          prestador_razao_social: string
+          serie: string
+          status: string
+          tomador_documento: string
+          tomador_email: string | null
+          tomador_endereco: string | null
+          tomador_nome: string
+          updated_at: string
+          user_id: string
+          valor_iss: number
+          valor_liquido: number
+          valor_servico: number
+        }
+        Insert: {
+          aliquota_iss?: number
+          codigo_servico?: string | null
+          created_at?: string
+          data_emissao?: string
+          descricao_servico: string
+          id?: string
+          loja_id?: string | null
+          numero: string
+          observacoes?: string | null
+          prestador_cnpj: string
+          prestador_endereco?: string | null
+          prestador_inscricao_municipal?: string | null
+          prestador_razao_social: string
+          serie?: string
+          status?: string
+          tomador_documento: string
+          tomador_email?: string | null
+          tomador_endereco?: string | null
+          tomador_nome: string
+          updated_at?: string
+          user_id: string
+          valor_iss?: number
+          valor_liquido?: number
+          valor_servico?: number
+        }
+        Update: {
+          aliquota_iss?: number
+          codigo_servico?: string | null
+          created_at?: string
+          data_emissao?: string
+          descricao_servico?: string
+          id?: string
+          loja_id?: string | null
+          numero?: string
+          observacoes?: string | null
+          prestador_cnpj?: string
+          prestador_endereco?: string | null
+          prestador_inscricao_municipal?: string | null
+          prestador_razao_social?: string
+          serie?: string
+          status?: string
+          tomador_documento?: string
+          tomador_email?: string | null
+          tomador_endereco?: string | null
+          tomador_nome?: string
+          updated_at?: string
+          user_id?: string
+          valor_iss?: number
+          valor_liquido?: number
+          valor_servico?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nfse_loja_id_fkey"
+            columns: ["loja_id"]
+            isOneToOne: false
+            referencedRelation: "lojas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       recorrencias_excluidas: {
         Row: {
           conta_modelo_id: string
