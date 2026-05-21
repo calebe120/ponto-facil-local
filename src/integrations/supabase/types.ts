@@ -175,6 +175,48 @@ export type Database = {
         }
         Relationships: []
       }
+      recorrencias_excluidas: {
+        Row: {
+          conta_modelo_id: string
+          created_at: string
+          data_vencimento: string
+          id: string
+          loja_id: string | null
+          user_id: string
+        }
+        Insert: {
+          conta_modelo_id: string
+          created_at?: string
+          data_vencimento: string
+          id?: string
+          loja_id?: string | null
+          user_id: string
+        }
+        Update: {
+          conta_modelo_id?: string
+          created_at?: string
+          data_vencimento?: string
+          id?: string
+          loja_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recorrencias_excluidas_conta_modelo_id_fkey"
+            columns: ["conta_modelo_id"]
+            isOneToOne: false
+            referencedRelation: "contas_modelo"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recorrencias_excluidas_loja_id_fkey"
+            columns: ["loja_id"]
+            isOneToOne: false
+            referencedRelation: "lojas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       time_records: {
         Row: {
           created_at: string
