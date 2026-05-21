@@ -187,11 +187,20 @@ const Financeiro = () => {
           .eq("conta_modelo_id", modelo.id);
         const existentesSet = new Set((existentes || []).map((e: any) => e.data_vencimento));
 
+        // Buscar exclusões manuais para não recriar
+        const { data: excluidas } = await supabase
+          .from("recorrencias_excluidas")
+          .select("data_vencimento")
+          .eq("conta_modelo_id", modelo.id);
+        const excluidasSet = new Set((excluidas || []).map((e: any) => e.data_vencimento));
+
         for (const { y, m } of months) {
           const lastDay = new Date(y, m, 0).getDate();
           const realDia = Math.min(dia, lastDay);
           const vencimento = `${y}-${String(m).padStart(2, "0")}-${String(realDia).padStart(2, "0")}`;
           if (existentesSet.has(vencimento)) continue;
+          if (excluidasSet.has(vencimento)) continue;
+
           await supabase.from("lancamentos_financeiros").insert({
             user_id: modelo.user_id,
             conta_modelo_id: modelo.id,
