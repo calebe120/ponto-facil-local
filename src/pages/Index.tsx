@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Clock, Users, Download, Trash2, Calendar, Edit, LogOut, Shield, DollarSign } from "lucide-react";
+import { Clock, Users, Download, Trash2, Calendar, Edit, LogOut, Shield, DollarSign, FileText } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import * as XLSX from "xlsx";
 import {
@@ -621,6 +621,10 @@ const Index = () => {
               <Button onClick={() => navigate("/financeiro")} variant="outline" size="sm">
                 <DollarSign className="w-4 h-4 mr-2" />
                 Financeiro
+              </Button>
+              <Button onClick={() => navigate("/nfse")} variant="outline" size="sm">
+                <FileText className="w-4 h-4 mr-2" />
+                NFS-e
               </Button>
               {role === "admin" && (
                 <Button onClick={() => navigate("/admin")} variant="default" size="sm">
