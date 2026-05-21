@@ -187,11 +187,20 @@ const Financeiro = () => {
           .eq("conta_modelo_id", modelo.id);
         const existentesSet = new Set((existentes || []).map((e: any) => e.data_vencimento));
 
+        // Buscar exclusões manuais para não recriar
+        const { data: excluidas } = await supabase
+          .from("recorrencias_excluidas")
+          .select("data_vencimento")
+          .eq("conta_modelo_id", modelo.id);
+        const excluidasSet = new Set((excluidas || []).map((e: any) => e.data_vencimento));
+
         for (const { y, m } of months) {
           const lastDay = new Date(y, m, 0).getDate();
           const realDia = Math.min(dia, lastDay);
           const vencimento = `${y}-${String(m).padStart(2, "0")}-${String(realDia).padStart(2, "0")}`;
           if (existentesSet.has(vencimento)) continue;
+          if (excluidasSet.has(vencimento)) continue;
+
           await supabase.from("lancamentos_financeiros").insert({
             user_id: modelo.user_id,
             conta_modelo_id: modelo.id,
@@ -389,8 +398,21 @@ const Financeiro = () => {
   const handleDelete = async () => {
     if (!deleteId || !currentLojaId) return;
     try {
+      // Buscar o lançamento antes para saber se é recorrente
+      const alvo = lancamentos.find((l) => l.id === deleteId);
       const { error } = await supabase.from("lancamentos_financeiros").delete().eq("id", deleteId);
       if (error) throw error;
+
+      // Se vier de um modelo recorrente, registrar exclusão para não recriar
+      if (alvo?.conta_modelo_id && alvo?.data_vencimento && user) {
+        await supabase.from("recorrencias_excluidas").insert({
+          user_id: user.id,
+          conta_modelo_id: alvo.conta_modelo_id,
+          loja_id: currentLojaId,
+          data_vencimento: alvo.data_vencimento,
+        });
+      }
+
       toast.success("Lançamento excluído");
       setDeleteOpen(false);
       await loadLancamentos(currentLojaId);
@@ -399,6 +421,7 @@ const Financeiro = () => {
       toast.error("Erro ao excluir");
     }
   };
+
 
   const handleLiquidar = async () => {
     if (!liquidarId || !currentLojaId) return;
